@@ -29,12 +29,20 @@ nav button{flex:1;background:none;color:var(--mut);border-radius:0;padding:16px}
  <div id="panel"></div>
 </section>
 <section id="v-daftar" class="hidden"><div class="card"><div id="list"></div><div class="row" style="margin-top:10px"><button id="sync">Kirim ke Sheets</button></div></div></section>
+<section id="v-tambah" class="hidden"><div class="card" id="t-lock"><h3>Tambah barang terkunci</h3><p class="mut">Hanya pemegang kunci yang boleh menambah barang.</p><input id="t-key" type="password" placeholder="Masukkan kunci"><div class="row" style="margin-top:10px"><button id="t-open">Buka kunci</button></div></div>
+<div class="card hidden" id="t-form"><h3>Tambah barang</h3>
+ <p class="mut">SKU utama (kode tunggal untuk barang ini)</p><input id="t-sku">
+ <p class="mut">Nama barang</p><input id="t-nama">
+ <p class="mut">Satuan terkecil (misal: pcs)</p><input id="t-kecil" value="pcs">
+ <p class="mut">Satuan lain (misal: dus berisi 40 pcs)</p><div id="t-rows"></div><button class="g" id="t-add">+ Tambah satuan</button>
+ <p class="mut">Kode barcode / kode lain (opsional)</p><input id="t-kode">
+ <div class="row" style="margin-top:10px"><button id="t-save">Simpan barang</button><button class="g" id="t-relock">Kunci kembali</button></div></div></section>
 <section id="v-set" class="hidden"><div class="card"><h3>Pengaturan</h3>
  <p class="mut">URL Web App dari Apps Script</p><input id="url" placeholder="https://script.google.com/macros/s/.../exec">
  <p class="mut">Nama sesi (misal: Gudang-A 31Okt)</p><input id="sesi">
  <div class="row" style="margin-top:10px"><button id="save">Simpan &amp; muat data barang</button></div><p id="info" class="mut"></p></div></section>
 </main>
-<nav><button data-v="hitung" class="on">Hitung</button><button data-v="daftar">Hasil (<span id="n">0</span>)</button><button data-v="set">Atur</button></nav>
+<nav><button data-v="hitung" class="on">Hitung</button><button data-v="daftar">Hasil (<span id="n">0</span>)</button><button data-v="set">Atur</button><button data-v="tambah">Tambah</button></nav>
 <script>
 const $=s=>document.querySelector(s),L=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}},S=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
 let M=L('master',{master:[],alias:[],uom:[]}),counts=L('counts',[]),cfg=L('cfg',{url:'',sesi:''}),cur=null,unk=null;
@@ -68,8 +76,23 @@ function save(){calc();if(!cur.t&&!confirm('Total 0. Tetap simpan sebagai barang
  else counts.push({sku:cur.m.sku,nama:cur.m.nama,rincian:r,total:cur.t,uom:cur.u[0].n,catatan:$('#cat').value});
  S('counts',counts);$('#panel').innerHTML='';cur=null;$('#q').value='';render();$('#q').focus()}
 async function post(b){if(!cfg.url)throw 0;const r=await fetch(cfg.url,{method:'POST',body:JSON.stringify(b)});if(!r.ok)throw 0;return r}
-function newItem(kode){const nama=prompt('Nama barang baru (kode: '+kode+')');if(!nama)return;const cat=prompt('Catatan (opsional)')||'';
- post({action:'new',kode,nama,catatan:cat}).then(()=>{alert('Tersimpan di sheet "Baru". Tambahkan ke Master saat tinjau.');$('#q').value=''}).catch(()=>alert('Gagal terkirim. Cek koneksi dan URL.'))}
+function go(v){document.querySelector('nav button[data-v='+v+']').click()}
+function newItem(kode){$('#t-kode').value=kode;$('#t-sku').value='';$('#t-nama').value='';go('tambah');$('#t-sku').focus()}
+function addRow(){const d=document.createElement('div');d.className='uom';d.innerHTML='<input class="ts" placeholder="Satuan (dus)"><input class="ti" type="number" inputmode="numeric" placeholder="Isi (40)">';$('#t-rows').append(d)}
+$('#t-add').onclick=addRow;addRow();
+let KEY='';
+function showT(){$('#t-lock').classList.toggle('hidden',!!KEY);$('#t-form').classList.toggle('hidden',!KEY);$('#t-key').value=''}
+$('#t-open').onclick=async()=>{const k=$('#t-key').value;if(!k)return;try{const j=await(await post({action:'cek',key:k})).json();if(j.ok){KEY=k;showT()}else alert('Kunci salah.')}catch(e){alert('Gagal memeriksa kunci. Cek koneksi dan URL.')}};
+$('#t-relock').onclick=()=>{KEY='';showT()};
+$('#t-save').onclick=async()=>{const sku=$('#t-sku').value.trim(),nama=$('#t-nama').value.trim(),kecil=$('#t-kecil').value.trim(),kode=$('#t-kode').value.trim();
+ if(!sku||!nama||!kecil)return alert('SKU, nama, dan satuan terkecil wajib diisi.');
+ const extra=[...document.querySelectorAll('#t-rows .uom')].map(r=>({satuan:r.querySelector('.ts').value.trim(),isi:+r.querySelector('.ti').value})).filter(x=>x.satuan||x.isi);
+ if(extra.some(x=>!x.satuan||!(x.isi>1)))return alert('Setiap satuan lain harus punya nama dan isi lebih dari 1.');
+ if(M.master.some(m=>norm(m.sku)===norm(sku)))return alert('SKU ini sudah ada. Cari barangnya di tab Hitung.');
+ if(kode&&M.alias.some(a=>norm(a.kode)===norm(kode)))return alert('Kode ini sudah terdaftar untuk barang lain.');
+ try{const r=await post({action:'item',sku,nama,uom:kecil,extra,kode,key:KEY});const j=await r.json();if(!j.ok){if(/Kunci/.test(j.error||'')){KEY='';showT()}return alert(j.error||'Gagal menyimpan.')}}catch(e){return alert('Gagal terkirim. Cek koneksi dan URL (butuh sinyal untuk tambah barang).')}
+ M.master.push({sku,nama,uom_kecil:kecil});M.uom.push({sku,satuan:kecil,isi:'1'});extra.forEach(x=>M.uom.push({sku,satuan:x.satuan,isi:String(x.isi)}));if(kode)M.alias.push({kode,sku});S('master',M);
+ ['#t-sku','#t-nama','#t-kode'].forEach(s=>$(s).value='');$('#t-rows').innerHTML='';addRow();go('hitung');$('#q').value='';render();open_(sku)};
 async function load(){const r=await fetch(cfg.url);M=await r.json();S('master',M)}
 $('#q').oninput=render;$('#q').onkeydown=e=>{if(e.key==='Enter'){const h=find($('#q').value);if(h.length===1)open_(h[0].sku)}};
 $('#hits').onclick=e=>{const h=e.target.closest('.hit');if(h)open_(h.dataset.s)};
@@ -82,6 +105,6 @@ $('#cam').onclick=async()=>{if(!('BarcodeDetector' in window))return alert('Brow
  const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});v.srcObject=s;v.play();const d=new BarcodeDetector();
  const stop=()=>{s.getTracks().forEach(t=>t.stop());v.remove()};v.onclick=stop;
  const tick=async()=>{if(!v.isConnected)return;try{const r=await d.detect(v);if(r.length){$('#q').value=r[0].rawValue;stop();render();const h=find($('#q').value);if(h.length===1)open_(h[0].sku);return}}catch(e){}setTimeout(tick,250)};tick()};
-document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x===b));['hitung','daftar','set'].forEach(v=>$('#v-'+v).classList.toggle('hidden',v!==b.dataset.v))});
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x===b));['hitung','daftar','tambah','set'].forEach(v=>$('#v-'+v).classList.toggle('hidden',v!==b.dataset.v))});
 render();if(!cfg.url)document.querySelector('nav button[data-v=set]').click();
 </script></body></html>
