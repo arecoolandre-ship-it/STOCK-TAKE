@@ -52,9 +52,20 @@ header,nav,.noprint{display:none!important}body{padding:0;background:#fff;color:
  <div id="dhead"></div><div id="dlist"></div></div></section>
 <section id="v-hasil" class="hidden"><div class="card"><div id="list"></div><div class="row" style="margin-top:12px"><button id="sync">Upload</button><button class="g" id="xl1">Simpan Excel</button><button class="g" id="clr">Kosongkan</button></div></div></section>
 
+<section id="v-master" class="hidden">
+ <div class="card" id="m-lock"><h3>Master barang terkunci</h3><p class="mut">Hanya pemegang kunci yang boleh menambah atau mengubah master.</p><input id="m-key" type="password" placeholder="Masukkan kunci"><div class="row" style="margin-top:10px"><button id="m-open">Buka kunci</button></div></div>
+ <div class="card hidden" id="m-form"><h3>Tambah / ubah barang</h3>
+  <p class="mut">SKU</p><input id="m-sku" autocomplete="off"><div id="m-exist"></div>
+  <p class="mut">Nama barang</p><input id="m-nama" autocomplete="off">
+  <p class="mut">Satuan acuan hasil (misal: CTN)</p><input id="m-uom" autocomplete="off">
+  <p class="mut">Satuan lain: nama dan isi per 1 satuan acuan (misal PCK = 12). Kosongkan kalau barang hanya satu satuan.</p><div id="m-rows"></div>
+  <button class="g" id="m-add">+ Tambah satuan lain</button>
+  <p class="mut">Rumus yang tersimpan:</p><div class="msg" id="m-prev">Satu satuan (tanpa konversi)</div>
+  <div class="row"><button id="m-save">Simpan ke Master</button><button class="g" id="m-relock">Kunci kembali</button></div></div>
+</section>
 </main>
 <div id="xm" class="modal hidden"><div class="card" id="xmc"></div></div>
-<nav><button data-v="input" class="on">Input</button><button data-v="hasil">Hasil (<span id="n">0</span>)</button><button data-v="daftar">Daftar</button></nav>
+<nav><button data-v="input" class="on">Input</button><button data-v="hasil">Hasil (<span id="n">0</span>)</button><button data-v="daftar">Daftar</button><button data-v="master">Master</button></nav>
 <script>
 const SHEET_ID='1VxBy5YcHtXAx60AQE1_tdIH93vujVM936m9EN4myJOU';
 const API_URL='https://script.google.com/macros/s/AKfycbz148KW4MSOoE8RPId9mEeNq-naqzD-DEOIASE1yOWQwysdjI1sSRdQAktx1zsBhvMX/exec'; // opsional: isi URL Apps Script (/exec) agar hasil terkirim otomatis ke DATA INPUTAN
@@ -145,6 +156,26 @@ function xl(rows){if(!rows.length)return alert('Belum ada data untuk disimpan.')
   if(sep)sel.forEach((l,i)=>setTimeout(()=>doXl(rows.filter(r=>r.lokasi===l),l),i*600));else doXl(rows.filter(r=>sel.includes(r.lokasi)),sel.length===ls.length?'':sel.join('+'))}}
 $('#xl1').onclick=()=>xl(counts.map(c=>({lokasi:c.lok,sku:c.sku,nama:c.nama,hitungan:hit(c),hasil:Math.round(hasil(c)*1e4)/1e4,uom:c.base,sesi:cfg.sesi,petugas:cfg.petugas})));
 $('#xl2').onclick=()=>{const pil=$('#dl').value;xl(rowsDaftar().filter(r=>!pil||r.lokasi===pil).sort((a,b)=>a.lokasi.localeCompare(b.lokasi)||a['nama barang'].localeCompare(b['nama barang'])).map(r=>({lokasi:r.lokasi,sku:r.sku,nama:r['nama barang'],hitungan:r['hitungan awal'],hasil:num(r['hasil hitungan']),uom:r.uom,sesi:r.sesi,petugas:r.petugas})))};
-document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x===b));['input','hasil','daftar'].forEach(v=>$('#v-'+v).classList.toggle('hidden',v!==b.dataset.v));if(b.dataset.v==='daftar')loadDaftar()});
+let MK='',mUpd=false;
+const api=b=>fetch(API_URL,{method:'POST',body:JSON.stringify(b)}).then(r=>r.json());
+function mshow(){$('#m-lock').classList.toggle('hidden',!!MK);$('#m-form').classList.toggle('hidden',!MK);$('#m-key').value=''}
+$('#m-open').onclick=async()=>{const k=$('#m-key').value;if(!k)return;try{const j=await api({action:'cek',key:k});if(j.ok){MK=k;mshow()}else alert('Kunci salah.')}catch(e){alert('Gagal memeriksa kunci. Cek koneksi.')}};
+$('#m-relock').onclick=()=>{MK='';mshow()};
+function mrow(u='',p=''){const d=document.createElement('div');d.className='uom';d.innerHTML=`<input class="mu" placeholder="Satuan (PCK)" value="${esc(u)}"><input class="mp" type="number" inputmode="decimal" placeholder="Isi per 1 acuan" value="${p}">`;$('#m-rows').append(d)}
+$('#m-add').onclick=()=>mrow();mrow();
+function mconv(){const base=$('#m-uom').value.trim().toUpperCase(),rs=[...document.querySelectorAll('#m-rows .uom')].map(r=>({u:r.querySelector('.mu').value.trim().toUpperCase(),p:r.querySelector('.mp').value})).filter(x=>x.u||x.p);
+ const bad=rs.some(x=>!x.u||!(+x.p>0)||x.u===base)||new Set(rs.map(x=>x.u)).size<rs.length;return{base,rs,bad,txt:rs.length?`1 ${base} = `+rs.map(x=>`${+x.p} ${x.u}`).join(' = '):''}}
+function mprev(){const c=mconv();$('#m-prev').textContent=c.bad?'Periksa isian satuan: nama wajib, isi lebih dari 0, tidak boleh sama.':(c.txt||'Satu satuan (tanpa konversi)')}
+$('#m-form').oninput=mprev;
+$('#m-sku').oninput=()=>{mUpd=false;const ex=items().find(x=>norm(x.sku)===norm($('#m-sku').value));$('#m-exist').innerHTML=ex?`<div class="msg">SKU sudah ada: <b>${esc(ex.nama)}</b>. <button class="g" id="m-edit">Muat untuk diubah</button></div>`:''};
+$('#m-exist').onclick=e=>{if(e.target.id!=='m-edit')return;const ex=items().find(x=>norm(x.sku)===norm($('#m-sku').value));if(!ex)return;
+ $('#m-nama').value=ex.nama;$('#m-uom').value=ex.base;$('#m-rows').innerHTML='';const u=units(ex.base,ex.conv).slice(1);u.forEach(x=>mrow(x.u,x.p));if(!u.length)mrow();mUpd=true;$('#m-exist').innerHTML='';mprev()};
+$('#m-save').onclick=async()=>{const sku=$('#m-sku').value.trim(),nama=$('#m-nama').value.trim(),c=mconv();
+ if(!sku||!nama||!c.base)return alert('SKU, nama barang, dan satuan acuan wajib diisi.');if(c.bad)return alert('Setiap satuan lain harus punya nama (berbeda dari satuan acuan) dan isi lebih dari 0.');
+ const ex=items().find(x=>norm(x.sku)===norm(sku));if(ex&&!mUpd&&!confirm(`SKU ${ex.sku} sudah ada (${ex.nama}). Perbarui data barang ini?`))return;
+ try{const j=await api({action:'master',key:MK,sku,nama,uom:c.base,konversi:c.txt,update:!!ex});if(!j.ok){if(/Kunci/.test(j.error||'')){MK='';mshow()}return alert(j.error||'Gagal menyimpan.')}}catch(e){return alert('Gagal terkirim. Cek koneksi dan coba lagi.')}
+ const row={'SKU':sku,'NAMA BARANG':nama,'UOM':c.base,'UOM DASAR':c.txt},i=M.master.findIndex(m=>norm(lc(m).sku)===norm(sku));if(i>=0)M.master[i]=row;else M.master.push(row);S('m3',M);
+ ['#m-sku','#m-nama','#m-uom'].forEach(s=>$(s).value='');$('#m-rows').innerHTML='';mrow();$('#m-exist').innerHTML='';mUpd=false;mprev();render();alert('Barang tersimpan di Master dan langsung bisa dihitung.')};
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x===b));['input','hasil','daftar','master'].forEach(v=>$('#v-'+v).classList.toggle('hidden',v!==b.dataset.v));if(b.dataset.v==='daftar')loadDaftar()});
 render();load().then(loadDaftar);
 </script></body></html>
