@@ -31,7 +31,8 @@ nav button{flex:1;background:none;color:var(--mut);border-radius:0;padding:16px}
 header,nav,.noprint{display:none!important}body{padding:0;background:#fff;color:#000}main{max-width:none;padding:0}
 .card{border:0;padding:0;margin:0;background:#fff}.band{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .pb{break-before:page;page-break-before:always}table{font-size:12px}.grp td{height:44px}@page{size:A4;margin:12mm}}
-</style></head><body>
+</style><script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head><body>
 <header><b>Stock Take</b><span id="st"></span></header>
 <main>
 <section id="v-input">
@@ -42,10 +43,10 @@ header,nav,.noprint{display:none!important}body{padding:0;background:#fff;color:
 </section>
 <section id="v-daftar" class="hidden"><div class="card">
  <div class="noprint"><div class="row"><select id="ds"></select><select id="dl"></select></div>
- <div class="row" style="margin:10px 0"><button id="dprint">Cetak</button><button class="g" id="dreload">Muat ulang</button></div>
+ <div class="row" style="margin:10px 0"><button id="dprint">Cetak</button><button class="g" id="xl2">Simpan Excel</button><button class="g" id="dreload">Muat ulang</button></div>
  <p id="dinfo" class="mut"></p></div>
  <div id="dhead"></div><div id="dlist"></div></div></section>
-<section id="v-hasil" class="hidden"><div class="card"><div id="list"></div><div class="row" style="margin-top:12px"><button id="sync">Upload</button><button class="g" id="clr">Kosongkan</button></div></div></section>
+<section id="v-hasil" class="hidden"><div class="card"><div id="list"></div><div class="row" style="margin-top:12px"><button id="sync">Upload</button><button class="g" id="xl1">Simpan Excel</button><button class="g" id="clr">Kosongkan</button></div></div></section>
 
 </main>
 <nav><button data-v="input" class="on">Input</button><button data-v="hasil">Hasil (<span id="n">0</span>)</button><button data-v="daftar">Daftar</button></nav>
@@ -119,6 +120,19 @@ function renderDaftar(ls){const all=rowsDaftar(),pil=$('#dl').value,ll=pil?[pil]
   return `<div class="grp${i?' pb':''}"><h3 class="band">LOKASI : ${esc(l)} (${g.length} item)</h3><table><tr><th>NO</th><th>SKU</th><th>NAMA BARANG</th><th>HITUNGAN</th><th class="n">HASIL</th><th>CATATAN</th></tr>`+
   g.map((r,j)=>`<tr><td>${j+1}</td><td><span class="bc">*${esc(r.sku.toUpperCase().replace(/[^0-9A-Z. $\/+%-]/g,'-'))}*</span></td><td>${esc(r['nama barang'])}</td><td>${esc(r['hitungan awal'])}</td><td class="n"><b>${esc(r['hasil hitungan'])}</b> ${esc(r.uom)}</td><td></td></tr>`).join('')+'</table></div>'}).join('')}
 $('#ds').onchange=fillLok;$('#dl').onchange=()=>fillLok();$('#dreload').onclick=loadDaftar;$('#dprint').onclick=()=>window.print();
+const num=s=>{s=String(s).trim();if(s.includes(','))s=s.replace(/\./g,'').replace(',','.');const n=parseFloat(s);return isNaN(n)?s:n};
+function buildWb(rows,X){const head=['NO','LOKASI','SKU','NAMA BARANG','HITUNGAN','HASIL','UOM','SESI'],cols=[{wch:5},{wch:16},{wch:14},{wch:44},{wch:20},{wch:12},{wch:8},{wch:18}];
+ const aoa=l=>[head,...l.map((r,i)=>[i+1,r.lokasi,String(r.sku),r.nama,r.hitungan,r.hasil,r.uom,r.sesi])],wb=X.utils.book_new();
+ const add=(n,l)=>{const ws=X.utils.aoa_to_sheet(aoa(l));ws['!cols']=cols;X.utils.book_append_sheet(wb,ws,n)};
+ add('SEMUA',rows);const used=['SEMUA'];
+ [...new Set(rows.map(r=>r.lokasi))].forEach(l=>{let n=String(l).replace(/[\[\]:*?\/\\]/g,'-').slice(0,28)||'LOKASI',k=n,i=2;while(used.includes(k))k=n+' '+i++;used.push(k);add(k,rows.filter(r=>r.lokasi===l))});return wb}
+function xl(rows){if(!rows.length)return alert('Belum ada data untuk disimpan.');
+ const d=new Date(),p=n=>String(n).padStart(2,'0'),sesi=(rows[0].sesi||'stock-take').replace(/[^\w .-]/g,'-'),nm=`StockTake_${sesi}_${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;
+ if(typeof XLSX==='undefined'){const q=v=>'"'+String(v).replace(/"/g,'""')+'"',t=[['NO','LOKASI','SKU','NAMA BARANG','HITUNGAN','HASIL','UOM','SESI'],...rows.map((r,i)=>[i+1,r.lokasi,r.sku,r.nama,r.hitungan,r.hasil,r.uom,r.sesi])].map(r=>r.map(q).join(',')).join('\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+t],{type:'text/csv'}));a.download=nm+'.csv';a.click();return alert('Pustaka Excel belum termuat (butuh internet). Data disimpan sebagai CSV, yang juga bisa dibuka di Excel.')}
+ XLSX.writeFile(buildWb(rows,XLSX),nm+'.xlsx')}
+$('#xl1').onclick=()=>xl(counts.map(c=>({lokasi:c.lok,sku:c.sku,nama:c.nama,hitungan:hit(c),hasil:Math.round(hasil(c)*1e4)/1e4,uom:c.base,sesi:cfg.sesi})));
+$('#xl2').onclick=()=>{const pil=$('#dl').value;xl(rowsDaftar().filter(r=>!pil||r.lokasi===pil).sort((a,b)=>a.lokasi.localeCompare(b.lokasi)||a['nama barang'].localeCompare(b['nama barang'])).map(r=>({lokasi:r.lokasi,sku:r.sku,nama:r['nama barang'],hitungan:r['hitungan awal'],hasil:num(r['hasil hitungan']),uom:r.uom,sesi:r.sesi})))};
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x===b));['input','hasil','daftar'].forEach(v=>$('#v-'+v).classList.toggle('hidden',v!==b.dataset.v));if(b.dataset.v==='daftar')loadDaftar()});
 render();load();
 </script></body></html>
