@@ -40,6 +40,7 @@ header,nav,.noprint{display:none!important}body{padding:0;background:#fff;color:
 <main>
 <section id="v-input">
  <div class="card"><p class="mut" style="margin:0 0 6px">Lokasi yang sedang dihitung</p><select id="lok"></select>
+ <p class="mut" style="margin:12px 0 6px">Nama petugas</p><input id="petugas" placeholder="nama Anda, misal: Budi" autocomplete="off">
  <p class="mut" style="margin:12px 0 6px">Nama sesi</p><input id="sesi" placeholder="misal: Opname Nov">
  <p class="mut" style="margin:12px 0 6px">Cari barang (SKU atau nama)</p><input id="q" placeholder="Ketik SKU atau nama" autocomplete="off"><div id="hits"></div><div class="row" style="margin-top:10px"><span id="info" class="mut"></span><button class="g" id="rl">Muat ulang data</button></div></div>
  <div id="panel"></div>
@@ -59,7 +60,7 @@ const SHEET_ID='1VxBy5YcHtXAx60AQE1_tdIH93vujVM936m9EN4myJOU';
 const API_URL='https://script.google.com/macros/s/AKfycbz148KW4MSOoE8RPId9mEeNq-naqzD-DEOIASE1yOWQwysdjI1sSRdQAktx1zsBhvMX/exec'; // opsional: isi URL Apps Script (/exec) agar hasil terkirim otomatis ke DATA INPUTAN
 const LOK_DEFAULT=['Gudang Kering','Frozen','Chiller','Packaging'];
 const $=s=>document.querySelector(s),L=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}},S=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
-let M=L('m3',{master:[],lokasi:[]}),counts=L('c3',[]),cfg=L('cfg3',{url:'',sesi:'',lok:''}),cur=null;
+let M=L('m3',{master:[],lokasi:[]}),counts=L('c3',[]),cfg=L('cfg3',{url:'',sesi:'',lok:'',petugas:''}),cur=null;
 const norm=s=>String(s).trim().toLowerCase(),fmt=n=>(+n).toLocaleString('id-ID',{maximumFractionDigits:4});
 const lc=r=>Object.fromEntries(Object.entries(r).map(([k,v])=>[k.trim().toLowerCase(),String(v).trim()]));
 // "1 CTN = 12 PCK" | "1 CTN = 12 PCK = 120 PCS" | "1 CTN = 12 PCK; 1 PCK = 10 PCS"
@@ -77,7 +78,7 @@ function render(){$('#n').textContent=counts.length;$('#st').textContent=(cfg.se
  $('#hits').innerHTML=!q?'':h.length?h.map(m=>`<div class="hit" data-s="${m.sku}"><b>${m.nama}</b><br><small>${m.sku} · ${m.base}</small></div>`).join(''):'<div class="msg">Barang tidak ditemukan di tab Master. Tambahkan di Sheets, lalu tekan Muat ulang data.</div>';
  const by={};counts.forEach((c,i)=>(by[c.lok]=by[c.lok]||[]).push([c,i]));
  $('#list').innerHTML=counts.length?Object.keys(by).map(k=>`<h3>${k}</h3><table><tr><th>SKU</th><th>Nama</th><th>Hitungan</th><th class="n">Hasil</th><th></th></tr>`+by[k].map(([c,i])=>`<tr><td>${c.sku}</td><td>${c.nama}</td><td>${hit(c)}</td><td class="n"><b>${fmt(hasil(c))}</b> ${c.base}</td><td><button class="r" data-d="${i}">×</button></td></tr>`).join('')+'</table>').join(''):'<p class="mut">Belum ada hasil. Mulai dari tab Input.</p>';
- $('#sesi').value=cfg.sesi;$('#sync').textContent='Upload'}
+ $('#sesi').value=cfg.sesi;$('#petugas').value=cfg.petugas||'';$('#sync').textContent='Upload'}
 function open_(sku){const m=items().find(x=>x.sku===sku),u=units(m.base,m.conv);cur={m,u};
  $('#panel').innerHTML=`<div class="card"><h3>${m.nama}</h3><div class="mut">${m.sku} · ${$('#lok').value||'pilih lokasi'}${u.length>1?' · '+m.conv:''}</div>`+u.map((x,i)=>`<div class="uom"><label>${x.u}</label><input data-i="${i}" type="number" inputmode="decimal" min="0" placeholder="0"></div>`).join('')+`<div id="warn"></div><div class="tot" id="tot">Hasil: 0 ${m.base}</div><div class="row"><button id="ok">Simpan hitungan</button><button class="g" id="x">Batal</button></div></div>`;
  $('#panel').querySelectorAll('input').forEach(e=>e.oninput=calc);$('#x').onclick=()=>{$('#panel').innerHTML='';cur=null};$('#ok').onclick=save;$('#hits').innerHTML='';$('input[data-i="0"]').focus()}
@@ -87,6 +88,7 @@ function calc(){const q=qs(),c={q,units:cur.u};$('#tot').textContent='Hasil: '+f
  $('#warn').innerHTML=w.map(t=>`<div class="msg">${t} Pastikan angkanya benar.</div>`).join('')}
 function save(){const lok=$('#lok').value;if(!lok)return alert('Pilih lokasi dulu.');
  const q=qs(),m=cur.m;if(!q.some(Boolean)&&!confirm('Hitungan 0. Tetap simpan?'))return;
+ const dup=D.find(r=>r.sesi===cfg.sesi&&r.lokasi===lok&&r.sku===m.sku&&(r.petugas||'')!==(cfg.petugas||''));if(dup&&!confirm(`${m.nama} di ${lok} sudah diupload oleh ${dup.petugas||'petugas lain'} (${dup['hitungan awal']}). Tetap simpan hitungan ini?`))return;
  const ex=counts.find(c=>c.sku===m.sku&&c.lok===lok);
  if(ex){if(!confirm(`${m.nama} di ${lok} sudah dihitung (${hit(ex)}). Tambahkan hitungan ini?`))return;ex.q=ex.q.map((x,i)=>x+q[i])}
  else counts.push({lok,sku:m.sku,nama:m.nama,base:m.base,units:cur.u,q});
@@ -101,13 +103,13 @@ async function getSheet(name){const r=await fetch(`https://docs.google.com/sprea
 async function load(){$('#info').textContent='Memuat data...';
  try{const m=await getSheet('Master');let l=[];try{l=await getSheet('LOKASI');if(l.length&&!('LOKASI' in l[0]))l=[]}catch(e){}
   M={master:m,lokasi:l};S('m3',M);$('#info').textContent=m.length+' barang dimuat'}catch(e){$('#info').textContent=M.master.length?'Offline: memakai data tersimpan ('+M.master.length+' barang)':'Gagal memuat. Pastikan Sheets dibagikan Anyone with the link: Viewer'}render()}
-$('#rl').onclick=load;$('#sesi').oninput=()=>{cfg.sesi=$('#sesi').value.trim();S('cfg3',cfg);$('#st').textContent=(cfg.sesi||'tanpa sesi')+' · '+M.master.length+' barang'};
-$('#sync').onclick=async()=>{if(!counts.length)return;
+$('#petugas').oninput=()=>{cfg.petugas=$('#petugas').value.trim();S('cfg3',cfg)};$('#rl').onclick=()=>{load();loadDaftar()};$('#sesi').oninput=()=>{cfg.sesi=$('#sesi').value.trim();S('cfg3',cfg);$('#st').textContent=(cfg.sesi||'tanpa sesi')+' · '+M.master.length+' barang'};
+$('#sync').onclick=async()=>{if(!counts.length)return;if(!cfg.petugas)return alert('Isi nama petugas di tab Input dulu.');
  const now=new Date().toLocaleString('id-ID'),it=counts.map(c=>({lokasi:c.lok,sku:c.sku,nama:c.nama,hitungan:hit(c),hasil:Math.round(hasil(c)*1e4)/1e4,uom:c.base}));
  if(!API_URL){if(!confirm('Upload otomatis belum aktif: butuh script Google yang dipasang satu kali, lalu URL-nya ditulis di baris API_URL pada index.html. Sementara itu, salin hasil untuk ditempel manual di DATA INPUTAN?'))return;
   const t=it.map(i=>[i.sku,i.nama,i.hitungan,fmt(i.hasil),i.lokasi,cfg.sesi,now,i.uom].join('\t')).join('\n');
   try{await navigator.clipboard.writeText(t);alert('Tersalin. Buka tab DATA INPUTAN, klik sel kosong di kolom A, lalu tempel.')}catch(e){prompt('Salin teks ini lalu tempel di DATA INPUTAN:',t)}return}
- try{const r=await fetch(API_URL,{method:'POST',body:JSON.stringify({action:'counts',sesi:cfg.sesi,items:it})});if(!r.ok)throw 0;counts=[];S('c3',counts);alert('Upload berhasil. Hasil sudah masuk ke tab DATA INPUTAN.')}catch(e){alert('Gagal terkirim. Data tetap aman di HP, coba lagi saat ada sinyal.')}render()};
+ try{const r=await fetch(API_URL,{method:'POST',body:JSON.stringify({action:'counts',sesi:cfg.sesi,petugas:cfg.petugas,items:it})});if(!r.ok)throw 0;counts=[];S('c3',counts);alert('Upload berhasil. Hasil sudah masuk ke tab DATA INPUTAN.')}catch(e){alert('Gagal terkirim. Data tetap aman di HP, coba lagi saat ada sinyal.')}render()};
 $('#clr').onclick=()=>{if(counts.length&&confirm('Kosongkan semua hasil di HP ini? Pastikan sudah terkirim.')){counts=[];S('c3',counts);render()}};
 let D=[];const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 async function loadDaftar(){$('#dinfo').textContent='Memuat hasil upload...';
@@ -121,12 +123,12 @@ function fillLok(){const old=$('#dl').value,ls=[...new Set(rowsDaftar().map(r=>r
 function renderDaftar(ls){const all=rowsDaftar(),pil=$('#dl').value,ll=pil?[pil]:ls;
  $('#dhead').innerHTML=`<b>DAFTAR HASIL STOCK TAKE</b><br><span class="mut">Sesi: ${esc($('#ds').value)||'-'} · ${all.filter(r=>!pil||r.lokasi===pil).length} item · dicetak ${new Date().toLocaleString('id-ID')}</span>`;
  $('#dlist').innerHTML=ll.map((l,i)=>{const g=all.filter(r=>r.lokasi===l).sort((a,b)=>a['nama barang'].localeCompare(b['nama barang']));
-  return `<div class="grp${i?' pb':''}"><h3 class="band">LOKASI : ${esc(l)} (${g.length} item)</h3><table><tr><th>NO</th><th>SKU</th><th>NAMA BARANG</th><th>HITUNGAN</th><th class="n">HASIL</th><th>CATATAN</th></tr>`+
-  g.map((r,j)=>`<tr><td>${j+1}</td><td><span class="bc">*${esc(r.sku.toUpperCase().replace(/[^0-9A-Z. $\/+%-]/g,'-'))}*</span></td><td>${esc(r['nama barang'])}</td><td>${esc(r['hitungan awal'])}</td><td class="n"><b>${esc(r['hasil hitungan'])}</b> ${esc(r.uom)}</td><td></td></tr>`).join('')+'</table></div>'}).join('')}
+  return `<div class="grp${i?' pb':''}"><h3 class="band">LOKASI : ${esc(l)} (${g.length} item)</h3><table><tr><th>NO</th><th>SKU</th><th>NAMA BARANG</th><th>HITUNGAN</th><th class="n">HASIL</th><th>PETUGAS</th><th>CATATAN</th></tr>`+
+  g.map((r,j)=>`<tr><td>${j+1}</td><td><span class="bc">*${esc(r.sku.toUpperCase().replace(/[^0-9A-Z. $\/+%-]/g,'-'))}*</span></td><td>${esc(r['nama barang'])}</td><td>${esc(r['hitungan awal'])}</td><td class="n"><b>${esc(r['hasil hitungan'])}</b> ${esc(r.uom)}</td><td>${esc(r.petugas||'')}</td><td></td></tr>`).join('')+'</table></div>'}).join('')}
 $('#ds').onchange=fillLok;$('#dl').onchange=()=>fillLok();$('#dreload').onclick=loadDaftar;$('#dprint').onclick=()=>window.print();
 const num=s=>{s=String(s).trim();if(s.includes(','))s=s.replace(/\./g,'').replace(',','.');const n=parseFloat(s);return isNaN(n)?s:n};
-function buildWb(rows,X){const head=['NO','LOKASI','SKU','NAMA BARANG','HITUNGAN','HASIL','UOM','SESI'],cols=[{wch:5},{wch:16},{wch:14},{wch:44},{wch:20},{wch:12},{wch:8},{wch:18}];
- const aoa=l=>[head,...l.map((r,i)=>[i+1,r.lokasi,String(r.sku),r.nama,r.hitungan,r.hasil,r.uom,r.sesi])],wb=X.utils.book_new();
+function buildWb(rows,X){const head=['NO','LOKASI','SKU','NAMA BARANG','HITUNGAN','HASIL','UOM','SESI','PETUGAS'],cols=[{wch:5},{wch:16},{wch:14},{wch:44},{wch:20},{wch:12},{wch:8},{wch:18},{wch:14}];
+ const aoa=l=>[head,...l.map((r,i)=>[i+1,r.lokasi,String(r.sku),r.nama,r.hitungan,r.hasil,r.uom,r.sesi,r.petugas||''])],wb=X.utils.book_new();
  const add=(n,l)=>{const ws=X.utils.aoa_to_sheet(aoa(l));ws['!cols']=cols;X.utils.book_append_sheet(wb,ws,n)};
  add('SEMUA',rows);const used=['SEMUA'];
  [...new Set(rows.map(r=>r.lokasi))].forEach(l=>{let n=String(l).replace(/[\[\]:*?\/\\]/g,'-').slice(0,28)||'LOKASI',k=n,i=2;while(used.includes(k))k=n+' '+i++;used.push(k);add(k,rows.filter(r=>r.lokasi===l))});return wb}
@@ -141,8 +143,8 @@ function xl(rows){if(!rows.length)return alert('Belum ada data untuk disimpan.')
  $('#xm').classList.remove('hidden');$('#xno').onclick=()=>$('#xm').classList.add('hidden');
  $('#xgo').onclick=()=>{const sel=[...document.querySelectorAll('.xk:checked')].map(e=>e.value);if(!sel.length)return alert('Pilih minimal satu lokasi.');const sep=$('#xsep').checked;$('#xm').classList.add('hidden');
   if(sep)sel.forEach((l,i)=>setTimeout(()=>doXl(rows.filter(r=>r.lokasi===l),l),i*600));else doXl(rows.filter(r=>sel.includes(r.lokasi)),sel.length===ls.length?'':sel.join('+'))}}
-$('#xl1').onclick=()=>xl(counts.map(c=>({lokasi:c.lok,sku:c.sku,nama:c.nama,hitungan:hit(c),hasil:Math.round(hasil(c)*1e4)/1e4,uom:c.base,sesi:cfg.sesi})));
-$('#xl2').onclick=()=>{const pil=$('#dl').value;xl(rowsDaftar().filter(r=>!pil||r.lokasi===pil).sort((a,b)=>a.lokasi.localeCompare(b.lokasi)||a['nama barang'].localeCompare(b['nama barang'])).map(r=>({lokasi:r.lokasi,sku:r.sku,nama:r['nama barang'],hitungan:r['hitungan awal'],hasil:num(r['hasil hitungan']),uom:r.uom,sesi:r.sesi})))};
+$('#xl1').onclick=()=>xl(counts.map(c=>({lokasi:c.lok,sku:c.sku,nama:c.nama,hitungan:hit(c),hasil:Math.round(hasil(c)*1e4)/1e4,uom:c.base,sesi:cfg.sesi,petugas:cfg.petugas})));
+$('#xl2').onclick=()=>{const pil=$('#dl').value;xl(rowsDaftar().filter(r=>!pil||r.lokasi===pil).sort((a,b)=>a.lokasi.localeCompare(b.lokasi)||a['nama barang'].localeCompare(b['nama barang'])).map(r=>({lokasi:r.lokasi,sku:r.sku,nama:r['nama barang'],hitungan:r['hitungan awal'],hasil:num(r['hasil hitungan']),uom:r.uom,sesi:r.sesi,petugas:r.petugas})))};
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x===b));['input','hasil','daftar'].forEach(v=>$('#v-'+v).classList.toggle('hidden',v!==b.dataset.v));if(b.dataset.v==='daftar')loadDaftar()});
-render();load();
+render();load().then(loadDaftar);
 </script></body></html>
