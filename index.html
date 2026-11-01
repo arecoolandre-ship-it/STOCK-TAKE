@@ -2,6 +2,7 @@
 <html lang="id"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Stock Take</title>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Barcode+39+Text&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#eef1f3;--card:#fff;--ink:#1d2b36;--mut:#5b6b78;--line:#d5dce1;--acc:#0b5fff;--warn:#b86e00;--bad:#c62828}
 @media(prefers-color-scheme:dark){:root{--bg:#10171c;--card:#19232b;--ink:#e8eef2;--mut:#93a4b1;--line:#2b3943;--acc:#6ea0ff;--warn:#f0b24a;--bad:#ff7b7b}}
@@ -22,6 +23,14 @@ h3{margin:14px 0 6px}h3:first-child{margin-top:0}
 nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--card);border-top:1px solid var(--line)}
 nav button{flex:1;background:none;color:var(--mut);border-radius:0;padding:16px}nav button.on{color:var(--acc);box-shadow:inset 0 3px var(--acc)}
 .hidden{display:none}
+.bc{font-family:"Libre Barcode 39 Text",monospace;font-size:34px;line-height:1.1;white-space:nowrap}
+.band{background:#1f3a5f;color:#fff;padding:8px 10px;border-radius:6px 6px 0 0;margin:14px 0 0;font-size:15px}
+#dhead{text-align:center;margin-bottom:6px}#dhead b{font-size:18px}.grp td,.grp th{padding:6px 5px}
+@media print{
+:root{--bg:#fff;--card:#fff;--ink:#000;--mut:#444;--line:#999}
+header,nav,.noprint{display:none!important}body{padding:0;background:#fff;color:#000}main{max-width:none;padding:0}
+.card{border:0;padding:0;margin:0;background:#fff}.band{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.pb{break-before:page;page-break-before:always}table{font-size:12px}.grp td{height:44px}@page{size:A4;margin:12mm}}
 </style></head><body>
 <header><b>Stock Take</b><span id="st"></span></header>
 <main>
@@ -31,10 +40,15 @@ nav button{flex:1;background:none;color:var(--mut);border-radius:0;padding:16px}
  <p class="mut" style="margin:12px 0 6px">Cari barang (SKU atau nama)</p><input id="q" placeholder="Ketik SKU atau nama" autocomplete="off"><div id="hits"></div><div class="row" style="margin-top:10px"><span id="info" class="mut"></span><button class="g" id="rl">Muat ulang data</button></div></div>
  <div id="panel"></div>
 </section>
+<section id="v-daftar" class="hidden"><div class="card">
+ <div class="noprint"><div class="row"><select id="ds"></select><select id="dl"></select></div>
+ <div class="row" style="margin:10px 0"><button id="dprint">Cetak</button><button class="g" id="dreload">Muat ulang</button></div>
+ <p id="dinfo" class="mut"></p></div>
+ <div id="dhead"></div><div id="dlist"></div></div></section>
 <section id="v-hasil" class="hidden"><div class="card"><div id="list"></div><div class="row" style="margin-top:12px"><button id="sync">Upload</button><button class="g" id="clr">Kosongkan</button></div></div></section>
 
 </main>
-<nav><button data-v="input" class="on">Input</button><button data-v="hasil">Hasil (<span id="n">0</span>)</button></nav>
+<nav><button data-v="input" class="on">Input</button><button data-v="hasil">Hasil (<span id="n">0</span>)</button><button data-v="daftar">Daftar</button></nav>
 <script>
 const SHEET_ID='1VxBy5YcHtXAx60AQE1_tdIH93vujVM936m9EN4myJOU';
 const API_URL='https://script.google.com/macros/s/AKfycbz148KW4MSOoE8RPId9mEeNq-naqzD-DEOIASE1yOWQwysdjI1sSRdQAktx1zsBhvMX/exec'; // opsional: isi URL Apps Script (/exec) agar hasil terkirim otomatis ke DATA INPUTAN
@@ -90,6 +104,21 @@ $('#sync').onclick=async()=>{if(!counts.length)return;
   try{await navigator.clipboard.writeText(t);alert('Tersalin. Buka tab DATA INPUTAN, klik sel kosong di kolom A, lalu tempel.')}catch(e){prompt('Salin teks ini lalu tempel di DATA INPUTAN:',t)}return}
  try{const r=await fetch(API_URL,{method:'POST',body:JSON.stringify({action:'counts',sesi:cfg.sesi,items:it})});if(!r.ok)throw 0;counts=[];S('c3',counts);alert('Upload berhasil. Hasil sudah masuk ke tab DATA INPUTAN.')}catch(e){alert('Gagal terkirim. Data tetap aman di HP, coba lagi saat ada sinyal.')}render()};
 $('#clr').onclick=()=>{if(counts.length&&confirm('Kosongkan semua hasil di HP ini? Pastikan sudah terkirim.')){counts=[];S('c3',counts);render()}};
-document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x===b));['input','hasil'].forEach(v=>$('#v-'+v).classList.toggle('hidden',v!==b.dataset.v))});
+let D=[];const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function loadDaftar(){$('#dinfo').textContent='Memuat hasil upload...';
+ try{D=(await getSheet('DATA INPUTAN')).map(lc).filter(r=>r.sku&&r.lokasi);const ss=[];for(let i=D.length-1;i>=0;i--)if(!ss.includes(D[i].sesi))ss.push(D[i].sesi);
+  const old=$('#ds').value;$('#ds').innerHTML=ss.map(s=>`<option value="${esc(s)}">${esc(s)||'(tanpa sesi)'}</option>`).join('');if(ss.includes(old))$('#ds').value=old;
+  $('#dinfo').textContent=D.length?'':'Belum ada hasil yang diupload.';fillLok()}catch(e){$('#dinfo').textContent='Gagal memuat. Pastikan Sheets dibagikan Anyone with the link: Viewer dan tab bernama DATA INPUTAN.'}}
+function rowsDaftar(){const u={};D.filter(r=>r.sesi===$('#ds').value).forEach(r=>{u[r.sku+'|'+r.lokasi]=r});return Object.values(u)}
+function fillLok(){const old=$('#dl').value,ls=[...new Set(rowsDaftar().map(r=>r.lokasi))],urut=M.lokasi.map(lc).map(l=>l.lokasi).filter(Boolean);
+ ls.sort((a,b)=>(urut.indexOf(a)<0?99:urut.indexOf(a))-(urut.indexOf(b)<0?99:urut.indexOf(b)));
+ $('#dl').innerHTML='<option value="">Semua lokasi</option>'+ls.map(l=>`<option>${esc(l)}</option>`).join('');if(ls.includes(old))$('#dl').value=old;renderDaftar(ls)}
+function renderDaftar(ls){const all=rowsDaftar(),pil=$('#dl').value,ll=pil?[pil]:ls;
+ $('#dhead').innerHTML=`<b>DAFTAR HASIL STOCK TAKE</b><br><span class="mut">Sesi: ${esc($('#ds').value)||'-'} · ${all.filter(r=>!pil||r.lokasi===pil).length} item · dicetak ${new Date().toLocaleString('id-ID')}</span>`;
+ $('#dlist').innerHTML=ll.map((l,i)=>{const g=all.filter(r=>r.lokasi===l).sort((a,b)=>a['nama barang'].localeCompare(b['nama barang']));
+  return `<div class="grp${i?' pb':''}"><h3 class="band">LOKASI : ${esc(l)} (${g.length} item)</h3><table><tr><th>NO</th><th>SKU</th><th>NAMA BARANG</th><th>HITUNGAN</th><th class="n">HASIL</th><th>CATATAN</th></tr>`+
+  g.map((r,j)=>`<tr><td>${j+1}</td><td><span class="bc">*${esc(r.sku.toUpperCase().replace(/[^0-9A-Z. $\/+%-]/g,'-'))}*</span></td><td>${esc(r['nama barang'])}</td><td>${esc(r['hitungan awal'])}</td><td class="n"><b>${esc(r['hasil hitungan'])}</b> ${esc(r.uom)}</td><td></td></tr>`).join('')+'</table></div>'}).join('')}
+$('#ds').onchange=fillLok;$('#dl').onchange=()=>fillLok();$('#dreload').onclick=loadDaftar;$('#dprint').onclick=()=>window.print();
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x===b));['input','hasil','daftar'].forEach(v=>$('#v-'+v).classList.toggle('hidden',v!==b.dataset.v));if(b.dataset.v==='daftar')loadDaftar()});
 render();load();
 </script></body></html>
