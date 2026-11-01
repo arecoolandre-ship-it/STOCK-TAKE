@@ -42,7 +42,7 @@ header,nav,.noprint{display:none!important}body{padding:0;background:#fff;color:
  <div class="card"><p class="mut" style="margin:0 0 6px">Lokasi yang sedang dihitung</p><select id="lok"></select>
  <p class="mut" style="margin:12px 0 6px">Nama petugas</p><input id="petugas" placeholder="nama Anda, misal: Budi" autocomplete="off">
  <p class="mut" style="margin:12px 0 6px">Nama sesi</p><input id="sesi" placeholder="misal: Opname Nov">
- <p class="mut" style="margin:12px 0 6px">Cari barang (SKU atau nama)</p><input id="q" placeholder="Ketik SKU atau nama" autocomplete="off"><div id="hits"></div><div class="row" style="margin-top:10px"><span id="info" class="mut"></span><button class="g" id="rl">Muat ulang data</button></div></div>
+ <p class="mut" style="margin:12px 0 6px">Cari barang (SKU atau nama)</p><div class="row"><input id="q" placeholder="Ketik SKU atau nama" autocomplete="off"><button class="g" id="cam">Scan</button></div><button class="g" id="pcam" style="width:100%;margin-top:8px">Cari lewat foto produk</button><input type="file" id="f-q" accept="image/*" capture="environment" class="hidden"><div id="hits"></div><div class="row" style="margin-top:10px"><span id="info" class="mut"></span><button class="g" id="rl">Muat ulang data</button></div></div>
  <div id="panel"></div>
 </section>
 <section id="v-daftar" class="hidden"><div class="card">
@@ -53,6 +53,13 @@ header,nav,.noprint{display:none!important}body{padding:0;background:#fff;color:
 <section id="v-hasil" class="hidden"><div class="card"><div id="list"></div><div class="row" style="margin-top:12px"><button id="sync">Upload</button><button class="g" id="xl1">Simpan Excel</button><button class="g" id="clr">Kosongkan</button></div></div></section>
 
 <section id="v-master" class="hidden">
+ <div class="card hidden" id="m-foto"><h3>Foto produk (untuk pencarian lewat foto)</h3>
+  <p class="mut">Isi SKU di formulir di atas (harus sudah ada di Master), lalu tambahkan foto. Satu SKU boleh punya banyak foto: dus, satuan, sisi lain.</p>
+  <div class="row" style="margin-bottom:8px"><button class="g" id="fb-cam">Ambil foto</button><button class="g" id="fb-gal">Pilih dari galeri</button></div>
+  <p class="mut">Impor banyak foto sekaligus: nama file = SKU (misal 8294272.jpg, 8294272_2.jpg).</p>
+  <div class="row"><button class="g" id="fb-bulk">Impor banyak foto</button><button class="r" id="fb-del">Hapus foto SKU ini</button></div>
+  <p class="mut" id="m-fcount"></p><p class="mut" id="mfi"></p>
+  <input type="file" id="f-cam" accept="image/*" capture="environment" class="hidden"><input type="file" id="f-gal" accept="image/*" multiple class="hidden"><input type="file" id="f-bulk" accept="image/*" multiple class="hidden"></div>
  <div class="card" id="m-lock"><h3>Master barang terkunci</h3><p class="mut">Hanya pemegang kunci yang boleh menambah atau mengubah master.</p><input id="m-key" type="password" placeholder="Masukkan kunci"><div class="row" style="margin-top:10px"><button id="m-open">Buka kunci</button></div></div>
  <div class="card hidden" id="m-form"><h3>Tambah / ubah barang</h3>
   <p class="mut">SKU</p><input id="m-sku" autocomplete="off"><div id="m-exist"></div>
@@ -60,10 +67,17 @@ header,nav,.noprint{display:none!important}body{padding:0;background:#fff;color:
   <p class="mut">Satuan acuan hasil (misal: CTN)</p><input id="m-uom" autocomplete="off">
   <p class="mut">Satuan lain: nama dan isi per 1 satuan acuan (misal PCK = 12). Kosongkan kalau barang hanya satu satuan.</p><div id="m-rows"></div>
   <button class="g" id="m-add">+ Tambah satuan lain</button>
+  <p class="mut">Foto produk (opsional, boleh lebih dari satu)</p>
+  <div class="row"><button class="g" id="mf-cam" type="button">Ambil foto</button><button class="g" id="mf-gal" type="button">Pilih dari galeri</button></div>
+  <div id="mf-prev" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:8px 0"></div>
+  <input type="file" id="f-mcam" accept="image/*" capture="environment" class="hidden"><input type="file" id="f-mgal" accept="image/*" multiple class="hidden">
   <p class="mut">Rumus yang tersimpan:</p><div class="msg" id="m-prev">Satu satuan (tanpa konversi)</div>
   <div class="row"><button id="m-save">Simpan ke Master</button><button class="g" id="m-relock">Kunci kembali</button></div></div>
 </section>
 </main>
+<div id="scan" class="modal hidden" style="background:#000;flex-direction:column;gap:12px;padding:12px">
+ <video id="sv" playsinline muted style="width:100%;max-width:560px;max-height:60vh;object-fit:cover;border-radius:8px"></video><div id="sbox" style="width:100%;max-width:560px"></div>
+ <p style="color:#fff;margin:0;text-align:center">Arahkan kamera ke barcode SKU</p><button class="g" id="sx" style="color:#fff;border-color:#fff">Tutup</button></div>
 <div id="xm" class="modal hidden"><div class="card" id="xmc"></div></div>
 <nav><button data-v="input" class="on">Input</button><button data-v="hasil">Hasil (<span id="n">0</span>)</button><button data-v="daftar">Daftar</button><button data-v="master">Master</button></nav>
 <script>
@@ -158,8 +172,8 @@ $('#xl1').onclick=()=>xl(counts.map(c=>({lokasi:c.lok,sku:c.sku,nama:c.nama,hitu
 $('#xl2').onclick=()=>{const pil=$('#dl').value;xl(rowsDaftar().filter(r=>!pil||r.lokasi===pil).sort((a,b)=>a.lokasi.localeCompare(b.lokasi)||a['nama barang'].localeCompare(b['nama barang'])).map(r=>({lokasi:r.lokasi,sku:r.sku,nama:r['nama barang'],hitungan:r['hitungan awal'],hasil:num(r['hasil hitungan']),uom:r.uom,sesi:r.sesi,petugas:r.petugas})))};
 let MK='',mUpd=false;
 const api=b=>fetch(API_URL,{method:'POST',body:JSON.stringify(b)}).then(r=>r.json());
-function mshow(){$('#m-lock').classList.toggle('hidden',!!MK);$('#m-form').classList.toggle('hidden',!MK);$('#m-key').value=''}
-$('#m-open').onclick=async()=>{const k=$('#m-key').value;if(!k)return;try{const j=await api({action:'cek',key:k});if(j.ok){MK=k;mshow()}else alert('Kunci salah.')}catch(e){alert('Gagal memeriksa kunci. Cek koneksi.')}};
+function mshow(){$('#m-foto').classList.toggle('hidden',!MK);$('#m-lock').classList.toggle('hidden',!!MK);$('#m-form').classList.toggle('hidden',!MK);$('#m-key').value=''}
+$('#m-open').onclick=async()=>{const k=$('#m-key').value;if(!k)return;try{const j=await api({action:'cek',key:k});if(j.ok){MK=k;mshow();ensureFoto().then(mfoto)}else alert('Kunci salah.')}catch(e){alert('Gagal memeriksa kunci. Cek koneksi.')}};
 $('#m-relock').onclick=()=>{MK='';mshow()};
 function mrow(u='',p=''){const d=document.createElement('div');d.className='uom';d.innerHTML=`<input class="mu" placeholder="Satuan (PCK)" value="${esc(u)}"><input class="mp" type="number" inputmode="decimal" placeholder="Isi per 1 acuan" value="${p}">`;$('#m-rows').append(d)}
 $('#m-add').onclick=()=>mrow();mrow();
@@ -175,7 +189,70 @@ $('#m-save').onclick=async()=>{const sku=$('#m-sku').value.trim(),nama=$('#m-nam
  const ex=items().find(x=>norm(x.sku)===norm(sku));if(ex&&!mUpd&&!confirm(`SKU ${ex.sku} sudah ada (${ex.nama}). Perbarui data barang ini?`))return;
  try{const j=await api({action:'master',key:MK,sku,nama,uom:c.base,konversi:c.txt,update:!!ex});if(!j.ok){if(/Kunci/.test(j.error||'')){MK='';mshow()}return alert(j.error||'Gagal menyimpan.')}}catch(e){return alert('Gagal terkirim. Cek koneksi dan coba lagi.')}
  const row={'SKU':sku,'NAMA BARANG':nama,'UOM':c.base,'UOM DASAR':c.txt},i=M.master.findIndex(m=>norm(lc(m).sku)===norm(sku));if(i>=0)M.master[i]=row;else M.master.push(row);S('m3',M);
- ['#m-sku','#m-nama','#m-uom'].forEach(s=>$(s).value='');$('#m-rows').innerHTML='';mrow();$('#m-exist').innerHTML='';mUpd=false;mprev();render();alert('Barang tersimpan di Master dan langsung bisa dihitung.')};
+ ['#m-sku','#m-nama','#m-uom'].forEach(s=>$(s).value='');$('#m-rows').innerHTML='';mrow();$('#m-exist').innerHTML='';mUpd=false;mprev();render();if(pf.length){const f=pf;pf=[];mprevf();await prosesFiles(f,sku)}else alert('Barang tersimpan di Master dan langsung bisa dihitung.')};
+let scanner=null,scanStream=null,scanOn=false;
+function stopScan(){scanOn=false;if(scanStream){scanStream.getTracks().forEach(t=>t.stop());scanStream=null}
+ if(scanner){const s=scanner;scanner=null;s.stop().then(()=>s.clear()).catch(()=>{})}$('#scan').classList.add('hidden');$('#sv').srcObject=null}
+function found(code){stopScan();if(navigator.vibrate)navigator.vibrate(60);$('#q').value=code;render();const h=find(code);if(h.length===1)open_(h[0].sku)}
+async function startScan(){$('#scan').classList.remove('hidden');scanOn=true;$('#sv').style.display='none';$('#sbox').innerHTML='';
+ try{
+  if('BarcodeDetector' in window){const sup=await BarcodeDetector.getSupportedFormats(),fm=['code_39','code_128','ean_13','ean_8','upc_a','upc_e','itf','qr_code'].filter(f=>sup.includes(f)),det=new BarcodeDetector({formats:fm});
+   scanStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}}});const v=$('#sv');v.style.display='block';v.srcObject=scanStream;await v.play();
+   const tick=async()=>{if(!scanOn)return;try{const r=await det.detect(v);if(r.length)return found(r[0].rawValue)}catch(e){}setTimeout(tick,200)};tick()}
+  else{if(typeof Html5Qrcode==='undefined')await new Promise((ok,no)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js';s.onload=ok;s.onerror=no;document.head.append(s)});
+   $('#sbox').innerHTML='<div id="rd"></div>';const F=Html5QrcodeSupportedFormats;scanner=new Html5Qrcode('rd',{formatsToSupport:[F.CODE_39,F.CODE_128,F.EAN_13,F.EAN_8,F.UPC_A,F.UPC_E,F.ITF,F.QR_CODE]});
+   await scanner.start({facingMode:'environment'},{fps:10,qrbox:{width:280,height:120}},t=>found(t),()=>{})}
+ }catch(e){stopScan();alert('Kamera tidak bisa dibuka. Izinkan akses kamera di browser (dan butuh internet untuk pemindai di sebagian HP), atau ketik SKU manual.')}}
+$('#cam').onclick=startScan;$('#sx').onclick=stopScan;
+let P=[],model=null,fotoOK=false;
+const info=t=>{$('#info').textContent=t;$('#mfi').textContent=t};
+const idb=(m,k,v)=>new Promise(res=>{try{const o=indexedDB.open('st',1);o.onupgradeneeded=()=>o.result.createObjectStore('k');o.onerror=()=>res(null);o.onsuccess=()=>{const s=o.result.transaction('k',m==='get'?'readonly':'readwrite').objectStore('k'),r=m==='get'?s.get(k):s.put(v,k);r.onsuccess=()=>res(r.result||null);r.onerror=()=>res(null)}}catch(e){res(null)}});
+const b64v=a=>{const mx=a.reduce((m,x)=>Math.max(m,Math.abs(x)),0)||1;let s='';a.forEach(x=>{s+=String.fromCharCode(Math.round(x/mx*127)&255)});return btoa(s)};
+const v64=s=>{const b=atob(s),a=new Float32Array(b.length);for(let i=0;i<b.length;i++){let x=b.charCodeAt(i);if(x>127)x-=256;a[i]=x}return a};
+const cos=(a,b)=>{let d=0,x=0,y=0;for(let i=0;i<a.length;i++){d+=a[i]*b[i];x+=a[i]*a[i];y+=b[i]*b[i]}return d/Math.sqrt(x*y||1)};
+const loadScript=u=>new Promise((ok,no)=>{const s=document.createElement('script');s.src=u;s.onload=ok;s.onerror=no;document.head.append(s)});
+async function getModel(){if(model)return model;info('Memuat model pengenal gambar (sekali, butuh internet)...');
+ if(typeof tf==='undefined')await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js');
+ if(typeof mobilenet==='undefined')await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.1/dist/mobilenet.min.js');
+ model=await mobilenet.load({version:2,alpha:1.0});return model}
+async function prep(file){let bmp;try{bmp=await createImageBitmap(file,{imageOrientation:'from-image'})}catch(e){bmp=await new Promise((ok,no)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=no;i.src=URL.createObjectURL(file)})}
+ const w=bmp.width,h=bmp.height,s=Math.min(w,h),c=document.createElement('canvas');c.width=c.height=224;c.getContext('2d').drawImage(bmp,(w-s)/2,(h-s)/2,s,s,0,0,224,224);
+ const t=document.createElement('canvas');t.width=t.height=96;t.getContext('2d').drawImage(c,0,0,96,96);
+ const m=await getModel(),e=m.infer(c,true),a=Array.from(await e.data());e.dispose();
+ return{f:a,thumb:t.toDataURL('image/jpeg',0.6).split(',')[1]}}
+async function ensureFoto(force){if(fotoOK&&!force)return;let rows=null;
+ try{rows=(await getSheet('FOTO')).map(r=>({sku:r.SKU,thumb:r.THUMB,vec:r.VEKTOR})).filter(r=>r.sku&&r.vec);await idb('put','foto',rows)}catch(e){rows=await idb('get','foto')||[]}
+ P=rows.map(r=>({sku:r.sku,thumb:r.thumb,vec:r.vec,v:v64(r.vec)}));fotoOK=true}
+async function cariFoto(file){info('Memproses foto...');
+ try{await ensureFoto();if(!P.length){info('');return alert('Belum ada foto contoh. Daftarkan foto di menu Master dulu.')}
+  const {f}=await prep(file),best={};P.forEach(p=>{const s=cos(f,p.v);if(!best[p.sku]||s>best[p.sku].s)best[p.sku]={s,p}});
+  const it=items(),top=Object.values(best).sort((a,b)=>b.s-a.s).filter(t=>it.some(x=>x.sku===t.p.sku)).slice(0,5);
+  $('#hits').innerHTML=top.map(t=>{const m=it.find(x=>x.sku===t.p.sku);return `<div class="hit" data-s="${esc(m.sku)}"><img src="data:image/jpeg;base64,${t.p.thumb}" style="width:56px;height:56px;object-fit:cover;border-radius:6px;float:left;margin-right:10px"><b>${esc(m.nama)}</b><br><small>${esc(m.sku)} · kemiripan ${Math.round(t.s*100)}%</small><div style="clear:both"></div></div>`}).join('')||'<div class="msg">Tidak ada kandidat yang cocok dengan Master.</div>';
+  $('#q').value='';info(M.master.length+' barang · '+P.length+' foto')}
+ catch(e){info('');alert('Gagal memproses foto. Pastikan internet aktif untuk memuat model pengenal gambar, lalu coba lagi.')}}
+$('#pcam').onclick=()=>$('#f-q').click();$('#f-q').onchange=e=>{const f=e.target.files[0];e.target.value='';if(f)cariFoto(f)};
+const cocokSku=(name,it)=>{const base=name.replace(/\.[^.]+$/,'').trim(),fd=s=>it.find(x=>norm(x.sku)===norm(s));let m=fd(base);if(m)return m.sku;m=fd(base.replace(/\s\(\d+\)$|[_\s-]\d{1,2}$/,''));return m?m.sku:null};
+function mfoto(){const s=norm($('#m-sku').value);$('#m-fcount').textContent=s?`Foto tersimpan untuk SKU ini: ${P.filter(p=>norm(p.sku)===s).length}`:''}
+$('#m-sku').addEventListener('input',mfoto);
+const saveIdb=()=>idb('put','foto',P.map(p=>({sku:p.sku,thumb:p.thumb,vec:p.vec})));
+async function prosesFiles(files,skuFix){await ensureFoto();const it=items(),out=[],skip=[];let n=0;
+ for(const f of files){n++;info(`Memproses foto ${n}/${files.length}...`);const sku=skuFix||cocokSku(f.name,it);if(!sku){skip.push(f.name);continue}
+  try{const p=await prep(f);out.push({sku,thumb:p.thumb,vec:b64v(p.f)})}catch(e){skip.push(f.name)}}
+ try{for(let i=0;i<out.length;i+=8){info(`Menyimpan ${Math.min(i+8,out.length)}/${out.length}...`);const j=await api({action:'foto',key:MK,items:out.slice(i,i+8)});if(!j.ok){if(/Kunci/.test(j.error||'')){MK='';mshow()}throw new Error(j.error||'gagal')}}}
+ catch(e){info('');return alert('Gagal menyimpan foto ke Sheets: '+e.message)}
+ out.forEach(x=>P.push({sku:x.sku,thumb:x.thumb,vec:x.vec,v:v64(x.vec)}));await saveIdb();mfoto();
+ info(out.length+' foto tersimpan.');alert(out.length+' foto tersimpan.'+(skip.length?'\nDilewati (SKU tidak ditemukan atau gagal diproses): '+skip.slice(0,15).join(', '):''))}
+const needSku=()=>{const s=items().find(x=>norm(x.sku)===norm($('#m-sku').value));if(!s){alert('Isi SKU yang sudah terdaftar di Master dulu.');return null}return s.sku};
+$('#fb-cam').onclick=()=>$('#f-cam').click();$('#fb-gal').onclick=()=>$('#f-gal').click();$('#fb-bulk').onclick=()=>$('#f-bulk').click();
+$('#f-cam').onchange=$('#f-gal').onchange=async e=>{const f=[...e.target.files];e.target.value='';if(!f.length)return;const s=needSku();if(s)await prosesFiles(f,s)};
+$('#f-bulk').onchange=async e=>{const f=[...e.target.files];e.target.value='';if(f.length)await prosesFiles(f,null)};
+$('#fb-del').onclick=async()=>{const s=needSku();if(!s||!confirm('Hapus semua foto contoh SKU '+s+'?'))return;
+ try{const j=await api({action:'foto_hapus',key:MK,sku:s});if(!j.ok)throw 0;await ensureFoto();P=P.filter(p=>norm(p.sku)!==norm(s));await saveIdb();mfoto()}catch(e){alert('Gagal menghapus foto.')}};
+let pf=[];
+function mprevf(){$('#mf-prev').innerHTML=pf.map(f=>`<img src="${URL.createObjectURL(f)}" style="width:56px;height:56px;object-fit:cover;border-radius:6px">`).join('')+(pf.length?'<button class="r" id="mf-clr" type="button">Hapus pilihan</button>':'')}
+$('#mf-cam').onclick=()=>$('#f-mcam').click();$('#mf-gal').onclick=()=>$('#f-mgal').click();
+$('#f-mcam').onchange=$('#f-mgal').onchange=e=>{pf=pf.concat([...e.target.files]);e.target.value='';mprevf()};
+$('#mf-prev').onclick=e=>{if(e.target.id==='mf-clr'){pf=[];mprevf()}};
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x===b));['input','hasil','daftar','master'].forEach(v=>$('#v-'+v).classList.toggle('hidden',v!==b.dataset.v));if(b.dataset.v==='daftar')loadDaftar()});
 render();load().then(loadDaftar);
 </script></body></html>
