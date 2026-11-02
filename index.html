@@ -82,7 +82,7 @@ header,nav,.noprint{display:none!important}body{padding:0;background:#fff;color:
 <nav><button data-v="input" class="on">Input</button><button data-v="hasil">Hasil (<span id="n">0</span>)</button><button data-v="daftar">Daftar</button><button data-v="master">Master</button></nav>
 <script>
 const SHEET_ID='1VxBy5YcHtXAx60AQE1_tdIH93vujVM936m9EN4myJOU';
-const API_URL='https://script.google.com/macros/s/AKfycbz148KW4MSOoE8RPId9mEeNq-naqzD-DEOIASE1yOWQwysdjI1sSRdQAktx1zsBhvMX/exec'; // opsional: isi URL Apps Script (/exec) agar hasil terkirim otomatis ke DATA INPUTAN
+const API_URL='https://script.google.com/macros/s/AKfycbxWA1k5aIINjUh-IyP8EXF87mNRKQKi5XplS-kJfic1ewbU5dW0Opnty6zTVBKIA59K/exec'; // opsional: isi URL Apps Script (/exec) agar hasil terkirim otomatis ke DATA INPUTAN
 const LOK_DEFAULT=['Gudang Kering','Frozen','Chiller','Packaging'];
 const $=s=>document.querySelector(s),L=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}},S=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
 let M=L('m3',{master:[],lokasi:[]}),counts=L('c3',[]),cfg=L('cfg3',{url:'',sesi:'',lok:'',petugas:''}),cur=null;
