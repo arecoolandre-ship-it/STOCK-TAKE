@@ -221,14 +221,16 @@ async function prep(file){let bmp;try{bmp=await createImageBitmap(file,{imageOri
  const m=await getModel(),e=m.infer(c,true),a=Array.from(await e.data());e.dispose();
  return{f:a,thumb:t.toDataURL('image/jpeg',0.6).split(',')[1]}}
 async function ensureFoto(force){if(fotoOK&&!force)return;let rows=null;
- try{rows=(await getSheet('FOTO')).map(r=>({sku:r.SKU,thumb:r.THUMB,vec:r.VEKTOR})).filter(r=>r.sku&&r.vec);await idb('put','foto',rows)}catch(e){rows=await idb('get','foto')||[]}
- P=rows.map(r=>({sku:r.sku,thumb:r.thumb,vec:r.vec,v:v64(r.vec)}));fotoOK=true}
+ try{const j=await(await fetch(API_URL+'?foto=1')).json();if(!j.foto)throw 0;rows=j.foto.filter(r=>r.sku&&/^[A-Za-z0-9+\/=]{100,}$/.test(r.vec));await idb('put','foto',rows);fotoOK=true}
+ catch(e){rows=await idb('get','foto')||[];fotoOK=rows.length>0}
+ P=rows.map(r=>({sku:r.sku,thumb:r.thumb,vec:r.vec,v:v64(r.vec)}))}
+const nk=s=>String(s).trim().toLowerCase().replace(/^'/,'');
 async function cariFoto(file){info('Memproses foto...');
- try{await ensureFoto();if(!P.length){info('');return alert('Belum ada foto contoh. Daftarkan foto di menu Master dulu.')}
+ try{await ensureFoto();if(!P.length){info('');return alert('Foto contoh belum terbaca dari Sheets. Pastikan deployment sudah New version dan tab FOTO berisi data, lalu coba lagi.')}
   const {f}=await prep(file),best={};P.forEach(p=>{const s=cos(f,p.v);if(!best[p.sku]||s>best[p.sku].s)best[p.sku]={s,p}});
-  const it=items(),top=Object.values(best).sort((a,b)=>b.s-a.s).filter(t=>it.some(x=>x.sku===t.p.sku)).slice(0,5);
-  $('#hits').innerHTML=top.map(t=>{const m=it.find(x=>x.sku===t.p.sku);return `<div class="hit" data-s="${esc(m.sku)}"><img src="data:image/jpeg;base64,${t.p.thumb}" style="width:56px;height:56px;object-fit:cover;border-radius:6px;float:left;margin-right:10px"><b>${esc(m.nama)}</b><br><small>${esc(m.sku)} · kemiripan ${Math.round(t.s*100)}%</small><div style="clear:both"></div></div>`}).join('')||'<div class="msg">Tidak ada kandidat yang cocok dengan Master.</div>';
-  $('#q').value='';info(M.master.length+' barang · '+P.length+' foto')}
+  const it=items(),all=Object.values(best).sort((a,b)=>b.s-a.s),top=all.filter(t=>it.some(x=>nk(x.sku)===nk(t.p.sku))).slice(0,5);
+  $('#hits').innerHTML=top.map(t=>{const m=it.find(x=>nk(x.sku)===nk(t.p.sku));return `<div class="hit" data-s="${esc(m.sku)}"><img src="data:image/jpeg;base64,${t.p.thumb}" style="width:56px;height:56px;object-fit:cover;border-radius:6px;float:left;margin-right:10px"><b>${esc(m.nama)}</b><br><small>${esc(m.sku)} · kemiripan ${Math.round(t.s*100)}%</small><div style="clear:both"></div></div>`}).join('')||`<div class="msg">Foto contoh termuat (${P.length} foto), tetapi SKU-nya tidak ada di Master: ${esc(all.slice(0,3).map(t=>t.p.sku).join(', '))}. Periksa penulisan SKU di tab Master dan FOTO.</div>`;
+  $('#q').value='';info(M.master.length+' barang · '+P.length+' foto contoh (terbaik: '+Math.round((all[0]||{s:0}).s*100)+'%)')}
  catch(e){info('');alert('Gagal memproses foto. Pastikan internet aktif untuk memuat model pengenal gambar, lalu coba lagi.')}}
 $('#pcam').onclick=()=>$('#f-q').click();$('#f-q').onchange=e=>{const f=e.target.files[0];e.target.value='';if(f)cariFoto(f)};
 const cocokSku=(name,it)=>{const base=name.replace(/\.[^.]+$/,'').trim(),fd=s=>it.find(x=>norm(x.sku)===norm(s));let m=fd(base);if(m)return m.sku;m=fd(base.replace(/\s\(\d+\)$|[_\s-]\d{1,2}$/,''));return m?m.sku:null};
