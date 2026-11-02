@@ -40,7 +40,6 @@ header,nav,.noprint{display:none!important}body{padding:0;background:#fff;color:
 <main>
 <section id="v-input">
  <div class="card"><p class="mut" style="margin:0 0 6px">Lokasi yang sedang dihitung</p><select id="lok"></select>
- <p class="mut" style="margin:12px 0 6px">Nama petugas</p><input id="petugas" placeholder="nama Anda, misal: Budi" autocomplete="off">
  <p class="mut" style="margin:12px 0 6px">Nama sesi</p><input id="sesi" placeholder="misal: Opname Nov">
  <p class="mut" style="margin:12px 0 6px">Cari barang (SKU atau nama)</p><div class="row"><input id="q" placeholder="Ketik SKU atau nama" autocomplete="off"><button class="g" id="cam">Scan</button></div><button class="g" id="pcam" style="width:100%;margin-top:8px">Cari lewat foto produk</button><input type="file" id="f-q" accept="image/*" capture="environment" class="hidden"><div id="hits"></div><div class="row" style="margin-top:10px"><span id="info" class="mut"></span><button class="g" id="rl">Muat ulang data</button></div></div>
  <div id="panel"></div>
@@ -78,6 +77,7 @@ header,nav,.noprint{display:none!important}body{padding:0;background:#fff;color:
 <div id="scan" class="modal hidden" style="background:#000;flex-direction:column;gap:12px;padding:12px">
  <video id="sv" playsinline muted style="width:100%;max-width:560px;max-height:60vh;object-fit:cover;border-radius:8px"></video><div id="sbox" style="width:100%;max-width:560px"></div>
  <p style="color:#fff;margin:0;text-align:center">Arahkan kamera ke barcode SKU</p><button class="g" id="sx" style="color:#fff;border-color:#fff">Tutup</button></div>
+<div id="pm" class="modal hidden"><div class="card"><h3>Nama petugas</h3><p class="mut">Nama Anda dicatat pada setiap hasil hitung yang diupload. Cukup diisi sekali di HP ini.</p><input id="pn" placeholder="misal: Budi" autocomplete="off"><div class="row" style="margin-top:12px"><button id="pok">Simpan</button><button class="g hidden" id="pno">Batal</button></div></div></div>
 <div id="xm" class="modal hidden"><div class="card" id="xmc"></div></div>
 <nav><button data-v="input" class="on">Input</button><button data-v="hasil">Hasil (<span id="n">0</span>)</button><button data-v="daftar">Daftar</button><button data-v="master">Master</button></nav>
 <script>
@@ -96,14 +96,14 @@ function units(base,txt){base=base.toUpperCase();const per={[base]:1},pr=[];
 const hasil=c=>c.q.reduce((s,x,i)=>s+x/c.units[i].p,0),hit=c=>c.q.map((x,i)=>x?x+' '+c.units[i].u:'').filter(Boolean).join(' ')||'0 '+c.base;
 const items=()=>M.master.map(lc).filter(m=>m.sku).map(m=>({sku:m.sku,nama:m['nama barang'],base:(m.uom||'').toUpperCase(),conv:m['uom dasar']}));
 function find(q){q=norm(q);if(!q)return[];const a=items(),ex=a.find(m=>norm(m.sku)===q);return ex?[ex]:a.filter(m=>norm(m.nama).includes(q)||norm(m.sku).includes(q)).slice(0,8)}
-function render(){$('#n').textContent=counts.length;$('#st').textContent=(cfg.sesi||'tanpa sesi')+' · '+M.master.length+' barang';
+function render(){$('#n').textContent=counts.length;$('#st').textContent=(cfg.petugas||'isi nama')+' · '+(cfg.sesi||'tanpa sesi')+' · '+M.master.length+' barang';
  const ls=M.lokasi.map(lc).map(l=>l.lokasi).filter(Boolean),lk=ls.length?ls:LOK_DEFAULT;
  $('#lok').innerHTML=lk.map(l=>`<option${l===cfg.lok?' selected':''}>${l}</option>`).join('');cfg.lok=$('#lok').value;
  const q=$('#q').value,h=find(q);
  $('#hits').innerHTML=!q?'':h.length?h.map(m=>`<div class="hit" data-s="${m.sku}"><b>${m.nama}</b><br><small>${m.sku} · ${m.base}</small></div>`).join(''):'<div class="msg">Barang tidak ditemukan di tab Master. Tambahkan di Sheets, lalu tekan Muat ulang data.</div>';
  const by={};counts.forEach((c,i)=>(by[c.lok]=by[c.lok]||[]).push([c,i]));
  $('#list').innerHTML=counts.length?Object.keys(by).map(k=>`<h3>${k}</h3><table><tr><th>SKU</th><th>Nama</th><th>Hitungan</th><th class="n">Hasil</th><th></th></tr>`+by[k].map(([c,i])=>`<tr><td>${c.sku}</td><td>${c.nama}</td><td>${hit(c)}</td><td class="n"><b>${fmt(hasil(c))}</b> ${c.base}</td><td><button class="r" data-d="${i}">×</button></td></tr>`).join('')+'</table>').join(''):'<p class="mut">Belum ada hasil. Mulai dari tab Input.</p>';
- $('#sesi').value=cfg.sesi;$('#petugas').value=cfg.petugas||'';$('#sync').textContent='Upload'}
+ $('#sesi').value=cfg.sesi;$('#sync').textContent='Upload'}
 function open_(sku){const m=items().find(x=>x.sku===sku),u=units(m.base,m.conv);cur={m,u};
  $('#panel').innerHTML=`<div class="card"><h3>${m.nama}</h3><div class="mut">${m.sku} · ${$('#lok').value||'pilih lokasi'}${u.length>1?' · '+m.conv:''}</div>`+u.map((x,i)=>`<div class="uom"><label>${x.u}</label><input data-i="${i}" type="number" inputmode="decimal" min="0" placeholder="0"></div>`).join('')+`<div id="warn"></div><div class="tot" id="tot">Hasil: 0 ${m.base}</div><div class="row"><button id="ok">Simpan hitungan</button><button class="g" id="x">Batal</button></div></div>`;
  $('#panel').querySelectorAll('input').forEach(e=>e.oninput=calc);$('#x').onclick=()=>{$('#panel').innerHTML='';cur=null};$('#ok').onclick=save;$('#hits').innerHTML='';$('input[data-i="0"]').focus()}
@@ -127,8 +127,8 @@ async function getSheet(name){const j=await(await fetch(API_URL+'?sheet='+encode
 async function load(){$('#info').textContent='Memuat data...';
  try{const m=await getSheet('Master');let l=[];try{l=await getSheet('LOKASI');if(l.length&&!('LOKASI' in l[0]))l=[]}catch(e){}
   M={master:m,lokasi:l};S('m3',M);$('#info').textContent=m.length+' barang dimuat'}catch(e){$('#info').textContent=M.master.length?'Offline: memakai data tersimpan ('+M.master.length+' barang)':'Gagal memuat. Periksa koneksi, lalu pastikan deployment script sudah New version.'}render()}
-$('#petugas').oninput=()=>{cfg.petugas=$('#petugas').value.trim();S('cfg3',cfg)};$('#rl').onclick=()=>{load();loadDaftar()};$('#sesi').oninput=()=>{cfg.sesi=$('#sesi').value.trim();S('cfg3',cfg);$('#st').textContent=(cfg.sesi||'tanpa sesi')+' · '+M.master.length+' barang'};
-$('#sync').onclick=async()=>{if(!counts.length)return;if(!cfg.petugas)return alert('Isi nama petugas di tab Input dulu.');
+$('#rl').onclick=()=>{load();loadDaftar()};$('#sesi').oninput=()=>{cfg.sesi=$('#sesi').value.trim();S('cfg3',cfg);$('#st').textContent=(cfg.petugas||'isi nama')+' · '+(cfg.sesi||'tanpa sesi')+' · '+M.master.length+' barang'};
+$('#sync').onclick=async()=>{if(!counts.length)return;if(!cfg.petugas){askNama(false);return}
  const now=new Date().toLocaleString('id-ID'),it=counts.map(c=>({lokasi:c.lok,sku:c.sku,nama:c.nama,hitungan:hit(c),hasil:Math.round(hasil(c)*1e4)/1e4,uom:c.base}));
  if(!API_URL){if(!confirm('Upload otomatis belum aktif: butuh script Google yang dipasang satu kali, lalu URL-nya ditulis di baris API_URL pada index.html. Sementara itu, salin hasil untuk ditempel manual di DATA INPUTAN?'))return;
   const t=it.map(i=>[i.sku,i.nama,i.hitungan,fmt(i.hasil),i.lokasi,cfg.sesi,now,i.uom].join('\t')).join('\n');
@@ -257,6 +257,10 @@ function mprevf(){$('#mf-prev').innerHTML=pf.map(f=>`<img src="${URL.createObjec
 $('#mf-cam').onclick=()=>$('#f-mcam').click();$('#mf-gal').onclick=()=>$('#f-mgal').click();
 $('#f-mcam').onchange=$('#f-mgal').onchange=e=>{pf=pf.concat([...e.target.files]);e.target.value='';mprevf()};
 $('#mf-prev').onclick=e=>{if(e.target.id==='mf-clr'){pf=[];mprevf()}};
+function askNama(edit){$('#pn').value=cfg.petugas||'';$('#pno').classList.toggle('hidden',!edit||!cfg.petugas);$('#pm').classList.remove('hidden');setTimeout(()=>$('#pn').focus(),50)}
+$('#pok').onclick=()=>{const n=$('#pn').value.trim();if(!n)return alert('Isi nama Anda dulu.');cfg.petugas=n;S('cfg3',cfg);$('#pm').classList.add('hidden');render()};
+$('#pn').onkeydown=e=>{if(e.key==='Enter')$('#pok').click()};$('#pno').onclick=()=>$('#pm').classList.add('hidden');
+$('#st').style.cursor='pointer';$('#st').title='Ketuk untuk mengganti nama petugas';$('#st').onclick=()=>askNama(true);
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x===b));['input','hasil','daftar','master'].forEach(v=>$('#v-'+v).classList.toggle('hidden',v!==b.dataset.v));if(b.dataset.v==='daftar')loadDaftar()});
-render();load().then(loadDaftar);
+render();if(!cfg.petugas)askNama(false);load().then(loadDaftar);
 </script></body></html>
