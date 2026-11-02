@@ -205,6 +205,7 @@ async function startScan(){$('#scan').classList.remove('hidden');scanOn=true;$('
  }catch(e){stopScan();alert('Kamera tidak bisa dibuka. Izinkan akses kamera di browser (dan butuh internet untuk pemindai di sebagian HP), atau ketik SKU manual.')}}
 $('#cam').onclick=startScan;$('#sx').onclick=stopScan;
 let P=[],model=null,fotoOK=false;
+const MODEL={version:1,alpha:0.5}; // model ringan; turunkan alpha ke 0.25 jika HP masih kehabisan memori
 const info=t=>{$('#info').textContent=t;$('#mfi').textContent=t};
 const idb=(m,k,v)=>new Promise(res=>{try{const o=indexedDB.open('st',1);o.onupgradeneeded=()=>o.result.createObjectStore('k');o.onerror=()=>res(null);o.onsuccess=()=>{const s=o.result.transaction('k',m==='get'?'readonly':'readwrite').objectStore('k'),r=m==='get'?s.get(k):s.put(v,k);r.onsuccess=()=>res(r.result||null);r.onerror=()=>res(null)}}catch(e){res(null)}});
 const b64v=a=>{const mx=a.reduce((m,x)=>Math.max(m,Math.abs(x)),0)||1;let s='';a.forEach(x=>{s+=String.fromCharCode(Math.round(x/mx*127)&255)});return btoa(s)};
@@ -214,8 +215,9 @@ const loadScript=u=>new Promise((ok,no)=>{const s=document.createElement('script
 async function getModel(){if(model)return model;info('Memuat model pengenal gambar (sekali, butuh internet)...');
  if(typeof tf==='undefined')await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js');
  if(typeof mobilenet==='undefined')await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.1/dist/mobilenet.min.js');
- model=await mobilenet.load({version:2,alpha:1.0});return model}
-async function prep(file){let bmp;try{bmp=await createImageBitmap(file,{imageOrientation:'from-image'})}catch(e){bmp=await new Promise((ok,no)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=no;i.src=URL.createObjectURL(file)})}
+ await tf.setBackend('cpu');await tf.ready(); // CPU: hemat memori, lebih stabil di HP berRAM kecil
+ model=await mobilenet.load(MODEL);return model}
+async function prep(file){let bmp;try{bmp=await createImageBitmap(file,{imageOrientation:'from-image',resizeWidth:640,resizeQuality:'low'})}catch(e){try{bmp=await createImageBitmap(file)}catch(e2){bmp=await new Promise((ok,no)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=no;i.src=URL.createObjectURL(file)})}}
  const w=bmp.width,h=bmp.height,s=Math.min(w,h),c=document.createElement('canvas');c.width=c.height=224;c.getContext('2d').drawImage(bmp,(w-s)/2,(h-s)/2,s,s,0,0,224,224);
  const t=document.createElement('canvas');t.width=t.height=96;t.getContext('2d').drawImage(c,0,0,96,96);
  const m=await getModel(),e=m.infer(c,true),a=Array.from(await e.data());e.dispose();
@@ -227,9 +229,11 @@ async function ensureFoto(force){if(fotoOK&&!force)return;let rows=null;
 const nk=s=>String(s).trim().toLowerCase().replace(/^'/,'');
 async function cariFoto(file){info('Memproses foto...');
  try{await ensureFoto();if(!P.length){info('');return alert('Foto contoh belum terbaca dari Sheets. Pastikan deployment sudah New version dan tab FOTO berisi data, lalu coba lagi.')}
-  const {f}=await prep(file),best={};P.forEach(p=>{const s=cos(f,p.v);if(!best[p.sku]||s>best[p.sku].s)best[p.sku]={s,p}});
+  const {f}=await prep(file),best={},Q=P.filter(p=>p.v.length===f.length);
+  if(!Q.length){info('');return alert('Foto contoh yang tersimpan dibuat dengan model lama. Hapus lalu daftarkan ulang foto contoh di menu Master.')}
+  Q.forEach(p=>{const s=cos(f,p.v);if(!best[p.sku]||s>best[p.sku].s)best[p.sku]={s,p}});
   const it=items(),all=Object.values(best).sort((a,b)=>b.s-a.s),top=all.filter(t=>it.some(x=>nk(x.sku)===nk(t.p.sku))).slice(0,5);
-  $('#hits').innerHTML=top.map(t=>{const m=it.find(x=>nk(x.sku)===nk(t.p.sku));return `<div class="hit" data-s="${esc(m.sku)}"><img src="data:image/jpeg;base64,${t.p.thumb}" style="width:56px;height:56px;object-fit:cover;border-radius:6px;float:left;margin-right:10px"><b>${esc(m.nama)}</b><br><small>${esc(m.sku)} · kemiripan ${Math.round(t.s*100)}%</small><div style="clear:both"></div></div>`}).join('')||`<div class="msg">Foto contoh termuat (${P.length} foto), tetapi SKU-nya tidak ada di Master: ${esc(all.slice(0,3).map(t=>t.p.sku).join(', '))}. Periksa penulisan SKU di tab Master dan FOTO.</div>`;
+  $('#hits').innerHTML=top.map(t=>{const m=it.find(x=>nk(x.sku)===nk(t.p.sku));return `<div class="hit" data-s="${esc(m.sku)}"><img src="data:image/jpeg;base64,${t.p.thumb}" style="width:56px;height:56px;object-fit:cover;border-radius:6px;float:left;margin-right:10px"><b>${esc(m.nama)}</b><br><small>${esc(m.sku)} · kemiripan ${Math.round(t.s*100)}%</small><div style="clear:both"></div></div>`}).join('')||`<div class="msg">Foto contoh termuat (${P.length} foto), tetapi SKU-nya tidak ada di Master: ${esc(all.slice(0,3).map(t=>t.p.sku).join(', '))}. SKU di Master: ${esc(it.slice(0,6).map(x=>x.sku).join(', ')||'-')}. Samakan SKU di tab FOTO dengan tab Master, atau hapus lalu daftarkan ulang fotonya.</div>`;
   $('#q').value='';info(M.master.length+' barang · '+P.length+' foto contoh (terbaik: '+Math.round((all[0]||{s:0}).s*100)+'%)')}
  catch(e){info('');alert('Gagal memproses foto. Pastikan internet aktif untuk memuat model pengenal gambar, lalu coba lagi.')}}
 $('#pcam').onclick=()=>$('#f-q').click();$('#f-q').onchange=e=>{const f=e.target.files[0];e.target.value='';if(f)cariFoto(f)};
