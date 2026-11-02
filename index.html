@@ -40,7 +40,6 @@ header,nav,.noprint{display:none!important}body{padding:0;background:#fff;color:
 <main>
 <section id="v-input">
  <div class="card"><p class="mut" style="margin:0 0 6px">Lokasi yang sedang dihitung</p><select id="lok"></select>
- <p class="mut" style="margin:12px 0 6px">Nama sesi</p><input id="sesi" placeholder="misal: Opname Nov">
  <p class="mut" style="margin:12px 0 6px">Cari barang (SKU atau nama)</p><div class="row"><input id="q" placeholder="Ketik SKU atau nama" autocomplete="off"><button class="g" id="cam">Scan</button></div><button class="g" id="pcam" style="width:100%;margin-top:8px">Cari lewat foto produk</button><input type="file" id="f-q" accept="image/*" capture="environment" class="hidden"><div id="hits"></div><div class="row" style="margin-top:10px"><span id="info" class="mut"></span><button class="g" id="rl">Muat ulang data</button></div></div>
  <div id="panel"></div>
 </section>
@@ -86,6 +85,7 @@ const API_URL='https://script.google.com/macros/s/AKfycbxWA1k5aIINjUh-IyP8EXF87m
 const LOK_DEFAULT=['Gudang Kering','Frozen','Chiller','Packaging'];
 const $=s=>document.querySelector(s),L=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}},S=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
 let M=L('m3',{master:[],lokasi:[]}),counts=L('c3',[]),cfg=L('cfg3',{url:'',sesi:'',lok:'',petugas:''}),cur=null;
+const sesiNow=()=>{const s=new Date().toLocaleDateString('id-ID',{month:'long',year:'numeric'});return s.charAt(0).toUpperCase()+s.slice(1)}; // sesi otomatis = bulan dan tahun saat penginputan
 const norm=s=>String(s).trim().toLowerCase(),fmt=n=>(+n).toLocaleString('id-ID',{maximumFractionDigits:4});
 const lc=r=>Object.fromEntries(Object.entries(r).map(([k,v])=>[k.trim().toLowerCase(),String(v).trim()]));
 // "1 CTN = 12 PCK" | "1 CTN = 12 PCK = 120 PCS" | "1 CTN = 12 PCK; 1 PCK = 10 PCS"
@@ -96,14 +96,14 @@ function units(base,txt){base=base.toUpperCase();const per={[base]:1},pr=[];
 const hasil=c=>c.q.reduce((s,x,i)=>s+x/c.units[i].p,0),hit=c=>c.q.map((x,i)=>x?x+' '+c.units[i].u:'').filter(Boolean).join(' ')||'0 '+c.base;
 const items=()=>M.master.map(lc).filter(m=>m.sku).map(m=>({sku:m.sku,nama:m['nama barang'],base:(m.uom||'').toUpperCase(),conv:m['uom dasar']}));
 function find(q){q=norm(q);if(!q)return[];const a=items(),ex=a.find(m=>norm(m.sku)===q);return ex?[ex]:a.filter(m=>norm(m.nama).includes(q)||norm(m.sku).includes(q)).slice(0,8)}
-function render(){$('#n').textContent=counts.length;$('#st').textContent=(cfg.petugas||'isi nama')+' · '+(cfg.sesi||'tanpa sesi')+' · '+M.master.length+' barang';
+function render(){$('#n').textContent=counts.length;$('#st').textContent=(cfg.petugas||'isi nama')+' · '+sesiNow()+' · '+M.master.length+' barang';
  const ls=M.lokasi.map(lc).map(l=>l.lokasi).filter(Boolean),lk=ls.length?ls:LOK_DEFAULT;
  $('#lok').innerHTML=lk.map(l=>`<option${l===cfg.lok?' selected':''}>${l}</option>`).join('');cfg.lok=$('#lok').value;
  const q=$('#q').value,h=find(q);
  $('#hits').innerHTML=!q?'':h.length?h.map(m=>`<div class="hit" data-s="${m.sku}"><b>${m.nama}</b><br><small>${m.sku} · ${m.base}</small></div>`).join(''):'<div class="msg">Barang tidak ditemukan di tab Master. Tambahkan di Sheets, lalu tekan Muat ulang data.</div>';
  const by={};counts.forEach((c,i)=>(by[c.lok]=by[c.lok]||[]).push([c,i]));
  $('#list').innerHTML=counts.length?Object.keys(by).map(k=>`<h3>${k}</h3><table><tr><th>SKU</th><th>Nama</th><th>Hitungan</th><th class="n">Hasil</th><th></th></tr>`+by[k].map(([c,i])=>`<tr><td>${c.sku}</td><td>${c.nama}</td><td>${hit(c)}</td><td class="n"><b>${fmt(hasil(c))}</b> ${c.base}</td><td><button class="r" data-d="${i}">×</button></td></tr>`).join('')+'</table>').join(''):'<p class="mut">Belum ada hasil. Mulai dari tab Input.</p>';
- $('#sesi').value=cfg.sesi;$('#sync').textContent='Upload'}
+ $('#sync').textContent='Upload'}
 function open_(sku){const m=items().find(x=>x.sku===sku),u=units(m.base,m.conv);cur={m,u};
  $('#panel').innerHTML=`<div class="card"><h3>${m.nama}</h3><div class="mut">${m.sku} · ${$('#lok').value||'pilih lokasi'}${u.length>1?' · '+m.conv:''}</div>`+u.map((x,i)=>`<div class="uom"><label>${x.u}</label><input data-i="${i}" type="number" inputmode="decimal" min="0" placeholder="0"></div>`).join('')+`<div id="warn"></div><div class="tot" id="tot">Hasil: 0 ${m.base}</div><div class="row"><button id="ok">Simpan hitungan</button><button class="g" id="x">Batal</button></div></div>`;
  $('#panel').querySelectorAll('input').forEach(e=>e.oninput=calc);$('#x').onclick=()=>{$('#panel').innerHTML='';cur=null};$('#ok').onclick=save;$('#hits').innerHTML='';$('input[data-i="0"]').focus()}
@@ -113,10 +113,10 @@ function calc(){const q=qs(),c={q,units:cur.u};$('#tot').textContent='Hasil: '+f
  $('#warn').innerHTML=w.map(t=>`<div class="msg">${t} Pastikan angkanya benar.</div>`).join('')}
 function save(){const lok=$('#lok').value;if(!lok)return alert('Pilih lokasi dulu.');
  const q=qs(),m=cur.m;if(!q.some(Boolean)&&!confirm('Hitungan 0. Tetap simpan?'))return;
- const dup=D.find(r=>r.sesi===cfg.sesi&&r.lokasi===lok&&r.sku===m.sku&&(r.petugas||'')!==(cfg.petugas||''));if(dup&&!confirm(`${m.nama} di ${lok} sudah diupload oleh ${dup.petugas||'petugas lain'} (${dup['hitungan awal']}). Tetap simpan hitungan ini?`))return;
- const ex=counts.find(c=>c.sku===m.sku&&c.lok===lok);
+ const dup=D.find(r=>r.sesi===sesiNow()&&r.lokasi===lok&&r.sku===m.sku&&(r.petugas||'')!==(cfg.petugas||''));if(dup&&!confirm(`${m.nama} di ${lok} sudah diupload oleh ${dup.petugas||'petugas lain'} (${dup['hitungan awal']}). Tetap simpan hitungan ini?`))return;
+ const ex=counts.find(c=>c.sku===m.sku&&c.lok===lok&&(c.sesi||sesiNow())===sesiNow());
  if(ex){if(!confirm(`${m.nama} di ${lok} sudah dihitung (${hit(ex)}). Tambahkan hitungan ini?`))return;ex.q=ex.q.map((x,i)=>x+q[i])}
- else counts.push({lok,sku:m.sku,nama:m.nama,base:m.base,units:cur.u,q});
+ else counts.push({lok,sku:m.sku,nama:m.nama,base:m.base,units:cur.u,q,sesi:sesiNow()});
  cfg.lok=lok;S('cfg3',cfg);S('c3',counts);$('#panel').innerHTML='';cur=null;$('#q').value='';render();$('#q').focus()}
 $('#q').oninput=render;$('#lok').onchange=()=>{cfg.lok=$('#lok').value;S('cfg3',cfg)};
 $('#q').onkeydown=e=>{if(e.key==='Enter'){const h=find($('#q').value);if(h.length===1)open_(h[0].sku)}};
@@ -127,13 +127,13 @@ async function getSheet(name){const j=await(await fetch(API_URL+'?sheet='+encode
 async function load(){$('#info').textContent='Memuat data...';
  try{const m=await getSheet('Master');let l=[];try{l=await getSheet('LOKASI');if(l.length&&!('LOKASI' in l[0]))l=[]}catch(e){}
   M={master:m,lokasi:l};S('m3',M);$('#info').textContent=m.length+' barang dimuat'}catch(e){$('#info').textContent=M.master.length?'Offline: memakai data tersimpan ('+M.master.length+' barang)':'Gagal memuat. Periksa koneksi, lalu pastikan deployment script sudah New version.'}render()}
-$('#rl').onclick=()=>{load();loadDaftar()};$('#sesi').oninput=()=>{cfg.sesi=$('#sesi').value.trim();S('cfg3',cfg);$('#st').textContent=(cfg.petugas||'isi nama')+' · '+(cfg.sesi||'tanpa sesi')+' · '+M.master.length+' barang'};
+$('#rl').onclick=()=>{load();loadDaftar()};
 $('#sync').onclick=async()=>{if(!counts.length)return;if(!cfg.petugas){askNama(false);return}
- const now=new Date().toLocaleString('id-ID'),it=counts.map(c=>({lokasi:c.lok,sku:c.sku,nama:c.nama,hitungan:hit(c),hasil:Math.round(hasil(c)*1e4)/1e4,uom:c.base}));
+ const now=new Date().toLocaleString('id-ID'),it=counts.map(c=>({lokasi:c.lok,sku:c.sku,nama:c.nama,hitungan:hit(c),hasil:Math.round(hasil(c)*1e4)/1e4,uom:c.base,sesi:c.sesi||sesiNow()}));
  if(!API_URL){if(!confirm('Upload otomatis belum aktif: butuh script Google yang dipasang satu kali, lalu URL-nya ditulis di baris API_URL pada index.html. Sementara itu, salin hasil untuk ditempel manual di DATA INPUTAN?'))return;
-  const t=it.map(i=>[i.sku,i.nama,i.hitungan,fmt(i.hasil),i.lokasi,cfg.sesi,now,i.uom].join('\t')).join('\n');
+  const t=it.map(i=>[i.sku,i.nama,i.hitungan,fmt(i.hasil),i.lokasi,i.sesi,now,i.uom].join('\t')).join('\n');
   try{await navigator.clipboard.writeText(t);alert('Tersalin. Buka tab DATA INPUTAN, klik sel kosong di kolom A, lalu tempel.')}catch(e){prompt('Salin teks ini lalu tempel di DATA INPUTAN:',t)}return}
- try{const r=await fetch(API_URL,{method:'POST',body:JSON.stringify({action:'counts',sesi:cfg.sesi,petugas:cfg.petugas,items:it})});if(!r.ok)throw 0;counts=[];S('c3',counts);alert('Upload berhasil. Hasil sudah masuk ke tab DATA INPUTAN.')}catch(e){alert('Gagal terkirim. Data tetap aman di HP, coba lagi saat ada sinyal.')}render()};
+ try{const r=await fetch(API_URL,{method:'POST',body:JSON.stringify({action:'counts',sesi:sesiNow(),petugas:cfg.petugas,items:it})});if(!r.ok)throw 0;counts=[];S('c3',counts);alert('Upload berhasil. Hasil sudah masuk ke tab DATA INPUTAN.')}catch(e){alert('Gagal terkirim. Data tetap aman di HP, coba lagi saat ada sinyal.')}render()};
 $('#clr').onclick=()=>{if(counts.length&&confirm('Kosongkan semua hasil di HP ini? Pastikan sudah terkirim.')){counts=[];S('c3',counts);render()}};
 let D=[];const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 async function loadDaftar(){$('#dinfo').textContent='Memuat hasil upload...';
@@ -167,7 +167,7 @@ function xl(rows){if(!rows.length)return alert('Belum ada data untuk disimpan.')
  $('#xm').classList.remove('hidden');$('#xno').onclick=()=>$('#xm').classList.add('hidden');
  $('#xgo').onclick=()=>{const sel=[...document.querySelectorAll('.xk:checked')].map(e=>e.value);if(!sel.length)return alert('Pilih minimal satu lokasi.');const sep=$('#xsep').checked;$('#xm').classList.add('hidden');
   if(sep)sel.forEach((l,i)=>setTimeout(()=>doXl(rows.filter(r=>r.lokasi===l),l),i*600));else doXl(rows.filter(r=>sel.includes(r.lokasi)),sel.length===ls.length?'':sel.join('+'))}}
-$('#xl1').onclick=()=>xl(counts.map(c=>({lokasi:c.lok,sku:c.sku,nama:c.nama,hitungan:hit(c),hasil:Math.round(hasil(c)*1e4)/1e4,uom:c.base,sesi:cfg.sesi,petugas:cfg.petugas})));
+$('#xl1').onclick=()=>xl(counts.map(c=>({lokasi:c.lok,sku:c.sku,nama:c.nama,hitungan:hit(c),hasil:Math.round(hasil(c)*1e4)/1e4,uom:c.base,sesi:c.sesi||sesiNow(),petugas:cfg.petugas})));
 $('#xl2').onclick=()=>{const pil=$('#dl').value;xl(rowsDaftar().filter(r=>!pil||r.lokasi===pil).sort((a,b)=>a.lokasi.localeCompare(b.lokasi)||a['nama barang'].localeCompare(b['nama barang'])).map(r=>({lokasi:r.lokasi,sku:r.sku,nama:r['nama barang'],hitungan:r['hitungan awal'],hasil:num(r['hasil hitungan']),uom:r.uom,sesi:r.sesi,petugas:r.petugas})))};
 let MK='',mUpd=false;
 const api=b=>fetch(API_URL,{method:'POST',body:JSON.stringify(b)}).then(r=>r.json());
