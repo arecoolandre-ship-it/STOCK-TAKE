@@ -123,11 +123,10 @@ $('#q').onkeydown=e=>{if(e.key==='Enter'){const h=find($('#q').value);if(h.lengt
 $('#hits').onclick=e=>{const h=e.target.closest('.hit');if(h)open_(h.dataset.s)};
 $('#list').onclick=e=>{const d=e.target.dataset.d;if(d!==undefined&&confirm('Hapus hitungan ini?')){counts.splice(+d,1);S('c3',counts);render()}};
 function csv(t){const r=[];let row=[],f='',q=false;for(let i=0;i<t.length;i++){const c=t[i];if(q){if(c=='"'){if(t[i+1]=='"'){f+='"';i++}else q=false}else f+=c}else if(c=='"')q=true;else if(c==','){row.push(f);f=''}else if(c=='\n'){row.push(f);r.push(row);row=[];f=''}else if(c!='\r')f+=c}if(f||row.length){row.push(f);r.push(row)}return r}
-async function getSheet(name){const r=await fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(name)}`);const t=await r.text();if(!r.ok||t.trim().startsWith('<'))throw 0;
- const rows=csv(t),k=rows.shift().map(x=>x.trim());return rows.filter(x=>x[0]).map(x=>Object.fromEntries(k.map((n,i)=>[n,(x[i]||'').trim()])))}
+async function getSheet(name){const j=await(await fetch(API_URL+'?sheet='+encodeURIComponent(name)+'&_='+Date.now(),{cache:'no-store'})).json();if(!j.rows)throw 0;return j.rows}
 async function load(){$('#info').textContent='Memuat data...';
  try{const m=await getSheet('Master');let l=[];try{l=await getSheet('LOKASI');if(l.length&&!('LOKASI' in l[0]))l=[]}catch(e){}
-  M={master:m,lokasi:l};S('m3',M);$('#info').textContent=m.length+' barang dimuat'}catch(e){$('#info').textContent=M.master.length?'Offline: memakai data tersimpan ('+M.master.length+' barang)':'Gagal memuat. Pastikan Sheets dibagikan Anyone with the link: Viewer'}render()}
+  M={master:m,lokasi:l};S('m3',M);$('#info').textContent=m.length+' barang dimuat'}catch(e){$('#info').textContent=M.master.length?'Offline: memakai data tersimpan ('+M.master.length+' barang)':'Gagal memuat. Periksa koneksi, lalu pastikan deployment script sudah New version.'}render()}
 $('#petugas').oninput=()=>{cfg.petugas=$('#petugas').value.trim();S('cfg3',cfg)};$('#rl').onclick=()=>{load();loadDaftar()};$('#sesi').oninput=()=>{cfg.sesi=$('#sesi').value.trim();S('cfg3',cfg);$('#st').textContent=(cfg.sesi||'tanpa sesi')+' · '+M.master.length+' barang'};
 $('#sync').onclick=async()=>{if(!counts.length)return;if(!cfg.petugas)return alert('Isi nama petugas di tab Input dulu.');
  const now=new Date().toLocaleString('id-ID'),it=counts.map(c=>({lokasi:c.lok,sku:c.sku,nama:c.nama,hitungan:hit(c),hasil:Math.round(hasil(c)*1e4)/1e4,uom:c.base}));
@@ -149,7 +148,7 @@ function renderDaftar(ls){const all=rowsDaftar(),pil=$('#dl').value,ll=pil?[pil]
  $('#dhead').innerHTML=`<b>DAFTAR HASIL STOCK TAKE</b><br><span class="mut">Sesi: ${esc($('#ds').value)||'-'} · ${all.filter(r=>!pil||r.lokasi===pil).length} item · dicetak ${new Date().toLocaleString('id-ID')}</span>`;
  $('#dlist').innerHTML=ll.map((l,i)=>{const g=all.filter(r=>r.lokasi===l).sort((a,b)=>a['nama barang'].localeCompare(b['nama barang']));
   return `<div class="grp${i?' pb':''}"><h3 class="band">LOKASI : ${esc(l)} (${g.length} item)</h3><table><tr><th>NO</th><th>SKU</th><th>NAMA BARANG</th><th>HITUNGAN</th><th class="n">HASIL</th><th>PETUGAS</th><th>CATATAN</th></tr>`+
-  g.map((r,j)=>`<tr><td>${j+1}</td><td><span class="bc">*${esc(r.sku.toUpperCase().replace(/[^0-9A-Z. $\/+%-]/g,'-'))}*</span></td><td>${esc(r['nama barang'])}</td><td>${esc(r['hitungan awal'])}</td><td class="n"><b>${esc(r['hasil hitungan'])}</b> ${esc(r.uom)}</td><td>${esc(r.petugas||'')}</td><td></td></tr>`).join('')+'</table></div>'}).join('')}
+  g.map((r,j)=>`<tr><td>${j+1}</td><td><span class="bc">*${esc(r.sku.toUpperCase().replace(/[^0-9A-Z. $\/+%-]/g,'-'))}*</span></td><td>${esc(r['nama barang'])}</td><td>${esc(r['hitungan awal'])}</td><td class="n"><b>${esc((n=>typeof n==='number'?fmt(n):r['hasil hitungan'])(num(r['hasil hitungan'])))}</b> ${esc(r.uom)}</td><td>${esc(r.petugas||'')}</td><td></td></tr>`).join('')+'</table></div>'}).join('')}
 $('#ds').onchange=fillLok;$('#dl').onchange=()=>fillLok();$('#dreload').onclick=loadDaftar;$('#dprint').onclick=()=>window.print();
 const num=s=>{s=String(s).trim();if(s.includes(','))s=s.replace(/\./g,'').replace(',','.');const n=parseFloat(s);return isNaN(n)?s:n};
 function buildWb(rows,X){const head=['NO','LOKASI','SKU','NAMA BARANG','HITUNGAN','HASIL','UOM','SESI','PETUGAS'],cols=[{wch:5},{wch:16},{wch:14},{wch:44},{wch:20},{wch:12},{wch:8},{wch:18},{wch:14}];
@@ -205,37 +204,36 @@ async function startScan(){$('#scan').classList.remove('hidden');scanOn=true;$('
  }catch(e){stopScan();alert('Kamera tidak bisa dibuka. Izinkan akses kamera di browser (dan butuh internet untuk pemindai di sebagian HP), atau ketik SKU manual.')}}
 $('#cam').onclick=startScan;$('#sx').onclick=stopScan;
 let P=[],model=null,fotoOK=false;
-const MODEL={version:1,alpha:0.5}; // model ringan; turunkan alpha ke 0.25 jika HP masih kehabisan memori
 const info=t=>{$('#info').textContent=t;$('#mfi').textContent=t};
 const idb=(m,k,v)=>new Promise(res=>{try{const o=indexedDB.open('st',1);o.onupgradeneeded=()=>o.result.createObjectStore('k');o.onerror=()=>res(null);o.onsuccess=()=>{const s=o.result.transaction('k',m==='get'?'readonly':'readwrite').objectStore('k'),r=m==='get'?s.get(k):s.put(v,k);r.onsuccess=()=>res(r.result||null);r.onerror=()=>res(null)}}catch(e){res(null)}});
 const b64v=a=>{const mx=a.reduce((m,x)=>Math.max(m,Math.abs(x)),0)||1;let s='';a.forEach(x=>{s+=String.fromCharCode(Math.round(x/mx*127)&255)});return btoa(s)};
+const sim=(a,b)=>.5*cos(a,b,0,768)+.5*cos(a,b,768,783);
 const v64=s=>{const b=atob(s),a=new Float32Array(b.length);for(let i=0;i<b.length;i++){let x=b.charCodeAt(i);if(x>127)x-=256;a[i]=x}return a};
-const cos=(a,b)=>{let d=0,x=0,y=0;for(let i=0;i<a.length;i++){d+=a[i]*b[i];x+=a[i]*a[i];y+=b[i]*b[i]}return d/Math.sqrt(x*y||1)};
-const loadScript=u=>new Promise((ok,no)=>{const s=document.createElement('script');s.src=u;s.onload=ok;s.onerror=no;document.head.append(s)});
-async function getModel(){if(model)return model;info('Memuat model pengenal gambar (sekali, butuh internet)...');
- if(typeof tf==='undefined')await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js');
- if(typeof mobilenet==='undefined')await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.1/dist/mobilenet.min.js');
- await tf.setBackend('cpu');await tf.ready(); // CPU: hemat memori, lebih stabil di HP berRAM kecil
- model=await mobilenet.load(MODEL);return model}
-async function prep(file){let bmp;try{bmp=await createImageBitmap(file,{imageOrientation:'from-image',resizeWidth:640,resizeQuality:'low'})}catch(e){try{bmp=await createImageBitmap(file)}catch(e2){bmp=await new Promise((ok,no)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=no;i.src=URL.createObjectURL(file)})}}
- const w=bmp.width,h=bmp.height,s=Math.min(w,h),c=document.createElement('canvas');c.width=c.height=224;c.getContext('2d').drawImage(bmp,(w-s)/2,(h-s)/2,s,s,0,0,224,224);
- const t=document.createElement('canvas');t.width=t.height=96;t.getContext('2d').drawImage(c,0,0,96,96);
- const m=await getModel(),e=m.infer(c,true),a=Array.from(await e.data());e.dispose();
- return{f:a,thumb:t.toDataURL('image/jpeg',0.6).split(',')[1]}}
+const cos=(a,b,i0=0,i1=a.length)=>{let d=0,x=0,y=0;for(let i=i0;i<i1;i++){d+=a[i]*b[i];x+=a[i]*a[i];y+=b[i]*b[i]}return d/Math.sqrt(x*y||1)};
+const FL=768,FT=783;
+async function prep(file){let bmp;try{bmp=await createImageBitmap(file,{imageOrientation:'from-image',resizeWidth:480,resizeQuality:'low'})}catch(e){try{bmp=await createImageBitmap(file)}catch(e2){bmp=await new Promise((ok,no)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=no;i.src=URL.createObjectURL(file)})}}
+ const w=bmp.width,h=bmp.height,s=Math.min(w,h),c=document.createElement('canvas');c.width=c.height=96;const x=c.getContext('2d');x.drawImage(bmp,(w-s)/2,(h-s)/2,s,s,0,0,96,96);if(bmp.close)bmp.close();
+ const px=(n)=>{const k=document.createElement('canvas');k.width=k.height=n;const g=k.getContext('2d');g.drawImage(c,0,0,n,n);return g.getImageData(0,0,n,n).data};
+ const a=px(16),L=[],m=[0,0,0];for(let i=0;i<a.length;i+=4){m[0]+=a[i];m[1]+=a[i+1];m[2]+=a[i+2]}m[0]/=256;m[1]/=256;m[2]/=256;
+ for(let i=0;i<a.length;i+=4)L.push((a[i]-m[0])/255,(a[i+1]-m[1])/255,(a[i+2]-m[2])/255);
+ const b=px(32),H=new Array(15).fill(0);
+ for(let i=0;i<b.length;i+=4){const r=b[i]/255,g=b[i+1]/255,bl=b[i+2]/255,mx=Math.max(r,g,bl),mn=Math.min(r,g,bl),d=mx-mn;let bin;
+  if(mx<.18)bin=0;else if(d/mx<.22)bin=mx<.6?1:2;else{let hu=d?(mx===r?((g-bl)/d)%6:mx===g?(bl-r)/d+2:(r-g)/d+4):0;if(hu<0)hu+=6;bin=3+Math.min(11,Math.floor(hu*2))}H[bin]++}
+ const hs=Math.sqrt(H.reduce((q,v)=>q+v,0))||1;return{f:L.concat(H.map(v=>Math.sqrt(v)/hs)),thumb:c.toDataURL('image/jpeg',0.6).split(',')[1]}}
 async function ensureFoto(force){if(fotoOK&&!force)return;let rows=null;
- try{const j=await(await fetch(API_URL+'?foto=1')).json();if(!j.foto)throw 0;rows=j.foto.filter(r=>r.sku&&/^[A-Za-z0-9+\/=]{100,}$/.test(r.vec));await idb('put','foto',rows);fotoOK=true}
+ try{const j=await(await fetch(API_URL+'?foto=1&_='+Date.now(),{cache:'no-store'})).json();if(!j.foto)throw 0;rows=j.foto.filter(r=>r.sku&&/^[A-Za-z0-9+\/=]{100,}$/.test(r.vec));await idb('put','foto',rows);fotoOK=true}
  catch(e){rows=await idb('get','foto')||[];fotoOK=rows.length>0}
  P=rows.map(r=>({sku:r.sku,thumb:r.thumb,vec:r.vec,v:v64(r.vec)}))}
 const nk=s=>String(s).trim().toLowerCase().replace(/^'/,'');
 async function cariFoto(file){info('Memproses foto...');
  try{await ensureFoto();if(!P.length){info('');return alert('Foto contoh belum terbaca dari Sheets. Pastikan deployment sudah New version dan tab FOTO berisi data, lalu coba lagi.')}
   const {f}=await prep(file),best={},Q=P.filter(p=>p.v.length===f.length);
-  if(!Q.length){info('');return alert('Foto contoh yang tersimpan dibuat dengan model lama. Hapus lalu daftarkan ulang foto contoh di menu Master.')}
-  Q.forEach(p=>{const s=cos(f,p.v);if(!best[p.sku]||s>best[p.sku].s)best[p.sku]={s,p}});
+  if(!Q.length){info('');return alert('Foto contoh yang tersimpan dibuat dengan cara lama. Hapus barisnya di tab FOTO, lalu daftarkan ulang foto contoh di menu Master.')}
+  Q.forEach(p=>{const s=sim(f,p.v);if(!best[p.sku]||s>best[p.sku].s)best[p.sku]={s,p}});
   const it=items(),all=Object.values(best).sort((a,b)=>b.s-a.s),top=all.filter(t=>it.some(x=>nk(x.sku)===nk(t.p.sku))).slice(0,5);
   $('#hits').innerHTML=top.map(t=>{const m=it.find(x=>nk(x.sku)===nk(t.p.sku));return `<div class="hit" data-s="${esc(m.sku)}"><img src="data:image/jpeg;base64,${t.p.thumb}" style="width:56px;height:56px;object-fit:cover;border-radius:6px;float:left;margin-right:10px"><b>${esc(m.nama)}</b><br><small>${esc(m.sku)} · kemiripan ${Math.round(t.s*100)}%</small><div style="clear:both"></div></div>`}).join('')||`<div class="msg">Foto contoh termuat (${P.length} foto), tetapi SKU-nya tidak ada di Master: ${esc(all.slice(0,3).map(t=>t.p.sku).join(', '))}. SKU di Master: ${esc(it.slice(0,6).map(x=>x.sku).join(', ')||'-')}. Samakan SKU di tab FOTO dengan tab Master, atau hapus lalu daftarkan ulang fotonya.</div>`;
   $('#q').value='';info(M.master.length+' barang · '+P.length+' foto contoh (terbaik: '+Math.round((all[0]||{s:0}).s*100)+'%)')}
- catch(e){info('');alert('Gagal memproses foto. Pastikan internet aktif untuk memuat model pengenal gambar, lalu coba lagi.')}}
+ catch(e){info('');alert('Gagal memproses foto. Coba lagi, atau pakai foto yang lebih kecil.')}}
 $('#pcam').onclick=()=>$('#f-q').click();$('#f-q').onchange=e=>{const f=e.target.files[0];e.target.value='';if(f)cariFoto(f)};
 const cocokSku=(name,it)=>{const base=name.replace(/\.[^.]+$/,'').trim(),fd=s=>it.find(x=>norm(x.sku)===norm(s));let m=fd(base);if(m)return m.sku;m=fd(base.replace(/\s\(\d+\)$|[_\s-]\d{1,2}$/,''));return m?m.sku:null};
 function mfoto(){const s=norm($('#m-sku').value);$('#m-fcount').textContent=s?`Foto tersimpan untuk SKU ini: ${P.filter(p=>norm(p.sku)===s).length}`:''}
