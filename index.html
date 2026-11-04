@@ -76,6 +76,11 @@ header,nav,.noprint{display:none!important}body{padding:0;background:#fff;color:
 <div id="scan" class="modal hidden" style="background:#000;flex-direction:column;gap:12px;padding:12px">
  <video id="sv" playsinline muted style="width:100%;max-width:560px;max-height:60vh;object-fit:cover;border-radius:8px"></video><div id="sbox" style="width:100%;max-width:560px"></div>
  <p style="color:#fff;margin:0;text-align:center">Arahkan kamera ke barcode SKU</p><button class="g" id="sx" style="color:#fff;border-color:#fff">Tutup</button></div>
+<div id="cm" class="modal hidden" style="background:#000;flex-direction:column;gap:12px;padding:12px">
+ <video id="cv" playsinline muted style="width:100%;max-width:560px;max-height:60vh;object-fit:cover;border-radius:8px"></video>
+ <p id="cmsg" style="color:#fff;margin:0;text-align:center">Posisikan kemasan memenuhi bingkai, lalu ambil foto</p>
+ <div class="row" style="max-width:560px;width:100%"><button id="cshot">Ambil foto</button><button class="g" id="cgal" style="color:#fff;border-color:#fff">Galeri</button><button class="g" id="cx" style="color:#fff;border-color:#fff">Tutup</button></div>
+ <input type="file" id="f-gq" accept="image/*" class="hidden"></div>
 <div id="pm" class="modal hidden"><div class="card"><h3>Nama petugas</h3><p class="mut">Nama Anda dicatat pada setiap hasil hitung yang diupload. Cukup diisi sekali di HP ini.</p><input id="pn" placeholder="misal: Budi" autocomplete="off"><div class="row" style="margin-top:12px"><button id="pok">Simpan</button><button class="g hidden" id="pno">Batal</button></div></div></div>
 <div id="xm" class="modal hidden"><div class="card" id="xmc"></div></div>
 <nav><button data-v="input" class="on">Input</button><button data-v="hasil">Hasil (<span id="n">0</span>)</button><button data-v="daftar">Daftar</button><button data-v="master">Master</button></nav>
@@ -261,6 +266,20 @@ function askNama(edit){$('#pn').value=cfg.petugas||'';$('#pno').classList.toggle
 $('#pok').onclick=()=>{const n=$('#pn').value.trim();if(!n)return alert('Isi nama Anda dulu.');cfg.petugas=n;S('cfg3',cfg);$('#pm').classList.add('hidden');render()};
 $('#pn').onkeydown=e=>{if(e.key==='Enter')$('#pok').click()};$('#pno').onclick=()=>$('#pm').classList.add('hidden');
 $('#st').style.cursor='pointer';$('#st').title='Ketuk untuk mengganti nama petugas';$('#st').onclick=()=>askNama(true);
+let camStream=null,camRes=null;
+function camStop(){if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null}const v=$('#cv');v.srcObject=null;$('#cm').classList.add('hidden')}
+// Kamera di dalam webapp: foto kecil (maks 640 px), tidak membuka aplikasi kamera HP yang memakan banyak memori
+function takePhoto(){return new Promise(async res=>{camRes=res;$('#cmsg').textContent='Posisikan kemasan memenuhi bingkai, lalu ambil foto';$('#cv').style.display='block';
+ try{camStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:640},height:{ideal:480}},audio:false});const v=$('#cv');v.srcObject=camStream;await v.play();$('#cm').classList.remove('hidden')}
+ catch(e){if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null}$('#cv').style.display='none';$('#cmsg').textContent='Kamera tidak bisa dibuka. Izinkan akses kamera di browser, atau pilih foto dari galeri.';$('#cm').classList.remove('hidden')}})}
+$('#cshot').onclick=()=>{const v=$('#cv');if(!v.videoWidth||!camRes)return;const k=Math.min(1,640/Math.max(v.videoWidth,v.videoHeight)),c=document.createElement('canvas');c.width=Math.round(v.videoWidth*k);c.height=Math.round(v.videoHeight*k);c.getContext('2d').drawImage(v,0,0,c.width,c.height);
+ const r=camRes;camRes=null;camStop();c.toBlob(b=>{b.name='foto.jpg';r(b)},'image/jpeg',0.85)};
+$('#cx').onclick=()=>{const r=camRes;camRes=null;camStop();if(r)r(null)};
+$('#cgal').onclick=()=>$('#f-gq').click();
+$('#f-gq').onchange=e=>{const f=e.target.files[0];e.target.value='';const r=camRes;camRes=null;camStop();if(r)r(f||null)};
+$('#pcam').onclick=async()=>{const f=await takePhoto();if(f)cariFoto(f)};
+$('#fb-cam').onclick=async()=>{const s=needSku();if(!s)return;const f=await takePhoto();if(f)await prosesFiles([f],s)};
+$('#mf-cam').onclick=async()=>{const f=await takePhoto();if(f){pf.push(f);mprevf()}};
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x===b));['input','hasil','daftar','master'].forEach(v=>$('#v-'+v).classList.toggle('hidden',v!==b.dataset.v));if(b.dataset.v==='daftar')loadDaftar()});
 render();if(!cfg.petugas)askNama(false);load().then(loadDaftar);
 </script></body></html>
