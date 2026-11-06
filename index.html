@@ -61,6 +61,11 @@ header,nav,.noprint{display:none!important}body{padding:0;background:#fff;color:
  <div id="dhead"></div><div id="dlist"></div></div></section>
 <section id="v-hasil" class="hidden"><div class="card"><div id="list"></div><div class="row" style="margin-top:12px"><button id="sync">Upload</button><button class="g" id="xl1">Simpan Excel</button><button class="g" id="clr">Kosongkan</button></div></div></section>
 
+<section id="v-kurang" class="hidden"><div class="card"><h3>Pengurangan barang</h3>
+ <p class="mut">Kurangi jumlah barang yang sudah diupload (sesi bulan ini). Riwayatnya tetap tersimpan di Sheets.</p>
+ <p class="mut">Lokasi</p><select id="kl"></select>
+ <p class="mut" style="margin-top:12px">Cari barang yang sudah diinput</p><input id="kq" placeholder="Ketik SKU atau nama" autocomplete="off">
+ <div id="khits"></div></div><div id="kpanel"></div></section>
 <section id="v-master" class="hidden">
  <div class="card hidden" id="m-foto"><h3>Foto produk (untuk pencarian lewat foto)</h3>
   <p class="mut">Isi SKU di formulir di atas (harus sudah ada di Master), lalu tambahkan foto. Satu SKU boleh punya banyak foto: dus, satuan, sisi lain.</p>
@@ -100,6 +105,7 @@ header,nav,.noprint{display:none!important}body{padding:0;background:#fff;color:
 <button data-v="input" class="on"><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></svg><span>Input</span></button>
 <button data-v="hasil"><svg viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2"/></svg><span>Hasil (<span id="n">0</span>)</span></button>
 <button data-v="daftar"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16M10 10v10"/></svg><span>Daftar</span></button>
+<button data-v="kurang"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></svg><span>Pengurangan</span></button>
 <div class="sec">Master</div>
 <button data-v="master"><svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg><span>Master Barang</span></button></nav>
 <script>
@@ -171,7 +177,7 @@ function renderDaftar(ls){const all=rowsDaftar(),pil=$('#dl').value,ll=pil?[pil]
  $('#dhead').innerHTML=`<b>DAFTAR HASIL STOCK TAKE</b><br><span class="mut">Sesi: ${esc($('#ds').value)||'-'} · ${all.filter(r=>!pil||r.lokasi===pil).length} item · dicetak ${new Date().toLocaleString('id-ID')}</span>`;
  $('#dlist').innerHTML=ll.map((l,i)=>{const g=all.filter(r=>r.lokasi===l).sort((a,b)=>a['nama barang'].localeCompare(b['nama barang']));
   return `<div class="grp${i?' pb':''}"><h3 class="band">LOKASI : ${esc(l)} (${g.length} item)</h3><table><tr><th>NO</th><th>SKU</th><th>NAMA BARANG</th><th>HITUNGAN</th><th class="n">HASIL</th><th>PETUGAS</th><th>CATATAN</th></tr>`+
-  g.map((r,j)=>`<tr><td>${j+1}</td><td><span class="bc">*${esc(r.sku.toUpperCase().replace(/[^0-9A-Z. $\/+%-]/g,'-'))}*</span></td><td>${esc(r['nama barang'])}</td><td>${esc(r['hitungan awal'])}</td><td class="n"><b>${esc((n=>typeof n==='number'?fmt(n):r['hasil hitungan'])(num(r['hasil hitungan'])))}</b> ${esc(r.uom)}</td><td>${esc(r.petugas||'')}</td><td></td></tr>`).join('')+'</table></div>'}).join('')}
+  g.map((r,j)=>`<tr><td>${j+1}</td><td><span class="bc">*${esc(r.sku.toUpperCase().replace(/[^0-9A-Z. $\/+%-]/g,'-'))}*</span></td><td>${esc(r['nama barang'])}</td><td>${esc(r['hitungan awal'])}</td><td class="n"><b>${esc((n=>typeof n==='number'?fmt(n):r['hasil hitungan'])(num(r['hasil hitungan'])))}</b> ${esc(r.uom)}</td><td>${esc(r.petugas||'')}</td><td>${esc(r.keterangan||'')}</td></tr>`).join('')+'</table></div>'}).join('')}
 $('#ds').onchange=fillLok;$('#dl').onchange=()=>fillLok();$('#dreload').onclick=loadDaftar;$('#dprint').onclick=()=>window.print();
 const num=s=>{s=String(s).trim();if(s.includes(','))s=s.replace(/\./g,'').replace(',','.');const n=parseFloat(s);return isNaN(n)?s:n};
 function buildWb(rows,X){const head=['NO','LOKASI','SKU','NAMA BARANG','HITUNGAN','HASIL','UOM','SESI','PETUGAS'],cols=[{wch:5},{wch:16},{wch:14},{wch:44},{wch:20},{wch:12},{wch:8},{wch:18},{wch:14}];
@@ -300,6 +306,34 @@ $('#fb-cam').onclick=async()=>{const s=needSku();if(!s)return;const f=await take
 $('#mf-cam').onclick=async()=>{const f=await takePhoto();if(f){pf.push(f);mprevf()}};
 const openNav=o=>{if(o)$('#pill').textContent=sesiNow()+(cfg.petugas?' · '+cfg.petugas:'');$('nav').classList.toggle('open',o);$('#bd').classList.toggle('hidden',!o)};
 $('#hb').onclick=()=>openNav(true);$('#bd').onclick=()=>openNav(false);
-document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x===b));['input','hasil','daftar','master'].forEach(v=>$('#v-'+v).classList.toggle('hidden',v!==b.dataset.v));if(b.dataset.v==='daftar')loadDaftar();openNav(false)});
+let kCur=null;
+function pecah(total,units){const last=units[units.length-1].p;let rem=Math.round(total*last+1e-6);const out=[];units.forEach(u=>{const size=last/u.p,q=Math.floor(rem/size+1e-9);rem-=q*size;if(q)out.push(q+' '+u.u)});return out.join(' ')||'0 '+units[0].u}
+const recsK=()=>{const lok=$('#kl').value,u={};D.filter(r=>r.sesi===sesiNow()&&r.lokasi===lok).forEach(r=>{u[nk(r.sku)]=r});return Object.values(u)};
+async function kInit(){$('#kl').innerHTML=$('#lok').innerHTML;$('#kl').value=$('#lok').value;$('#kpanel').innerHTML='';kCur=null;$('#khits').innerHTML='<p class="mut">Memuat data...</p>';await loadDaftar();renderK()}
+function renderK(){const q=norm($('#kq').value),rs=recsK().filter(r=>!q||norm(r['nama barang']).includes(q)||norm(r.sku).includes(q)).sort((a,b)=>a['nama barang'].localeCompare(b['nama barang']));
+ $('#khits').innerHTML=rs.length?rs.map(r=>`<div class="hit" data-s="${esc(r.sku)}"><b>${esc(r['nama barang'])}</b><br><small>${esc(r.sku)} · tercatat ${esc(r['hitungan awal'])}</small></div>`).join(''):'<p class="mut">Belum ada barang yang diupload di lokasi dan bulan ini.</p>'}
+function openK(sku){const rec=recsK().find(r=>nk(r.sku)===nk(sku)),m=items().find(x=>nk(x.sku)===nk(sku));
+ if(!rec||!m)return alert('Barang tidak ditemukan di Master atau belum ada hitungannya.');
+ const cur=num(rec['hasil hitungan']);if(typeof cur!=='number')return alert('Jumlah tercatat tidak terbaca.');
+ const u=units(m.base,m.conv);kCur={rec,m,u,cur};
+ $('#kpanel').innerHTML=`<div class="card"><h3>${esc(m.nama)}</h3><div class="mut">${esc(m.sku)} · ${esc($('#kl').value)}</div>
+ <div class="msg">Tercatat sekarang: <b>${esc(rec['hitungan awal'])}</b> = ${fmt(cur)} ${esc(m.base)}</div><p class="mut">Jumlah yang dikurangi:</p>`+
+ u.map((x,i)=>`<div class="uom"><label>${esc(x.u)}</label><input class="ki" data-i="${i}" type="number" inputmode="decimal" min="0" placeholder="0"></div>`).join('')+
+ `<div class="tot" id="ktot"></div><p class="mut">Alasan (opsional)</p><input id="kalasan" placeholder="misal: rusak, retur" autocomplete="off"><div class="row" style="margin-top:12px"><button id="kok">Simpan pengurangan</button><button class="g" id="kno">Batal</button></div></div>`;
+ document.querySelectorAll('.ki').forEach(e=>e.oninput=calcK);$('#kno').onclick=()=>{$('#kpanel').innerHTML='';kCur=null};$('#kok').onclick=saveK;calcK();$('#kpanel').scrollIntoView({behavior:'smooth'})}
+const kq=()=>[...document.querySelectorAll('.ki')].map(e=>+e.value||0);
+function calcK(){const q=kq(),red=q.reduce((s,x,i)=>s+x/kCur.u[i].p,0),sisa=kCur.cur-red;
+ $('#ktot').innerHTML=sisa<-0.0001?`<span style="color:var(--bad)">Pengurangan melebihi jumlah tercatat.</span>`:`Sisa: ${esc(pecah(Math.max(0,Math.round(sisa*1e4)/1e4),kCur.u))} <span class="mut">(${fmt(Math.max(0,sisa))} ${esc(kCur.m.base)})</span>`}
+async function saveK(){if(!kCur)return;if(!cfg.petugas){askNama(false);return}
+ const q=kq(),red=Math.round(q.reduce((s,x,i)=>s+x/kCur.u[i].p,0)*1e4)/1e4;
+ if(!red)return alert('Isi jumlah yang dikurangi.');if(red>kCur.cur+0.0001)return alert('Pengurangan melebihi jumlah tercatat.');
+ const hit=q.map((x,i)=>x?x+' '+kCur.u[i].u:'').filter(Boolean).join(' ');
+ if(!confirm(`Kurangi ${kCur.m.nama} di ${$('#kl').value} sebanyak ${hit}?`))return;
+ try{const j=await api({action:'kurang',sku:kCur.m.sku,nama:kCur.m.nama,lokasi:$('#kl').value,sesi:sesiNow(),petugas:cfg.petugas,kurang:red,hitungan:hit,uom:kCur.m.base,units:kCur.u,alasan:$('#kalasan').value.trim()});
+  if(j.hitungan===undefined)return alert(j.error||'Script belum versi terbaru. Lakukan Deploy > New version di Apps Script.');
+  alert('Pengurangan tersimpan. Sisa sekarang: '+j.hitungan)}catch(e){return alert('Gagal terkirim. Cek koneksi dan coba lagi.')}
+ $('#kpanel').innerHTML='';kCur=null;await loadDaftar();renderK()}
+$('#kl').onchange=()=>{$('#kpanel').innerHTML='';kCur=null;renderK()};$('#kq').oninput=renderK;$('#khits').onclick=e=>{const x=e.target.closest('.hit');if(x)openK(x.dataset.s)};
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x===b));['input','hasil','daftar','kurang','master'].forEach(v=>$('#v-'+v).classList.toggle('hidden',v!==b.dataset.v));if(b.dataset.v==='daftar')loadDaftar();if(b.dataset.v==='kurang')kInit();openNav(false)});
 render();if(!cfg.petugas)askNama(false);load().then(loadDaftar);
 </script></body></html>
