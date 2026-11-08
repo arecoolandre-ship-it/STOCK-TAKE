@@ -51,7 +51,7 @@ header,nav,.noprint{display:none!important}body{padding:0;background:#fff;color:
 <main>
 <section id="v-input">
  <div class="card"><p class="mut" style="margin:0 0 6px">Lokasi yang sedang dihitung</p><select id="lok"></select>
- <p class="mut" style="margin:12px 0 6px">Cari barang (SKU atau nama)</p><div class="row"><input id="q" placeholder="Ketik SKU atau nama" autocomplete="off"><button class="g" id="cam">Scan</button></div><button class="g" id="pcam" style="width:100%;margin-top:8px">Cari lewat foto produk</button><input type="file" id="f-q" accept="image/*" capture="environment" class="hidden"><div id="hits"></div><div class="row" style="margin-top:10px"><span id="info" class="mut"></span><button class="g" id="rl">Muat ulang data</button></div></div>
+ <p class="mut" style="margin:12px 0 6px">Cari barang (SKU atau nama)</p><div class="row"><input id="q" placeholder="Ketik SKU atau nama" autocomplete="off"><button class="g" id="cam">Scan</button></div><button class="g" id="pcam" style="width:100%;margin-top:8px">Cari lewat foto produk</button><select id="simSel" style="margin-top:8px"><option value="longgar">Ketelitian foto: Longgar (70%)</option><option value="normal">Ketelitian foto: Normal (78%)</option><option value="ketat">Ketelitian foto: Ketat (85%)</option></select><input type="file" id="f-q" accept="image/*" capture="environment" class="hidden"><div id="hits"></div><div class="row" style="margin-top:10px"><span id="info" class="mut"></span><button class="g" id="rl">Muat ulang data</button></div></div>
  <div id="panel"></div>
 </section>
 <section id="v-daftar" class="hidden"><div class="card">
@@ -231,6 +231,7 @@ async function startScan(){$('#scan').classList.remove('hidden');scanOn=true;$('
  }catch(e){stopScan();alert('Kamera tidak bisa dibuka. Izinkan akses kamera di browser (dan butuh internet untuk pemindai di sebagian HP), atau ketik SKU manual.')}}
 $('#cam').onclick=startScan;$('#sx').onclick=stopScan;
 let P=[],model=null,fotoOK=false;
+const THR={longgar:.70,normal:.78,ketat:.85}; // batas kemiripan minimum agar barang ditampilkan sebagai hasil pencarian foto
 const info=t=>{$('#info').textContent=t;$('#mfi').textContent=t};
 const idb=(m,k,v)=>new Promise(res=>{try{const o=indexedDB.open('st',1);o.onupgradeneeded=()=>o.result.createObjectStore('k');o.onerror=()=>res(null);o.onsuccess=()=>{const s=o.result.transaction('k',m==='get'?'readonly':'readwrite').objectStore('k'),r=m==='get'?s.get(k):s.put(v,k);r.onsuccess=()=>res(r.result||null);r.onerror=()=>res(null)}}catch(e){res(null)}});
 const b64v=a=>{const mx=a.reduce((m,x)=>Math.max(m,Math.abs(x)),0)||1;let s='';a.forEach(x=>{s+=String.fromCharCode(Math.round(x/mx*127)&255)});return btoa(s)};
@@ -257,9 +258,13 @@ async function cariFoto(file){info('Memproses foto...');
   const {f}=await prep(file),best={},Q=P.filter(p=>p.v.length===f.length);
   if(!Q.length){info('');return alert('Foto contoh yang tersimpan dibuat dengan cara lama. Hapus barisnya di tab FOTO, lalu daftarkan ulang foto contoh di menu Master.')}
   Q.forEach(p=>{const s=sim(f,p.v);if(!best[p.sku]||s>best[p.sku].s)best[p.sku]={s,p}});
-  const it=items(),all=Object.values(best).sort((a,b)=>b.s-a.s),top=all.filter(t=>it.some(x=>nk(x.sku)===nk(t.p.sku))).slice(0,5);
-  $('#hits').innerHTML=top.map(t=>{const m=it.find(x=>nk(x.sku)===nk(t.p.sku));return `<div class="hit" data-s="${esc(m.sku)}"><img src="data:image/jpeg;base64,${t.p.thumb}" style="width:56px;height:56px;object-fit:cover;border-radius:6px;float:left;margin-right:10px"><b>${esc(m.nama)}</b><br><small>${esc(m.sku)} · kemiripan ${Math.round(t.s*100)}%</small><div style="clear:both"></div></div>`}).join('')||`<div class="msg">Foto contoh termuat (${P.length} foto), tetapi SKU-nya tidak ada di Master: ${esc(all.slice(0,3).map(t=>t.p.sku).join(', '))}. SKU di Master: ${esc(it.slice(0,6).map(x=>x.sku).join(', ')||'-')}. Samakan SKU di tab FOTO dengan tab Master, atau hapus lalu daftarkan ulang fotonya.</div>`;
-  $('#q').value='';info(M.master.length+' barang · '+P.length+' foto contoh (terbaik: '+Math.round((all[0]||{s:0}).s*100)+'%)')}
+  const it=items(),raw=Object.values(best).sort((a,b)=>b.s-a.s),all=raw.filter(t=>it.some(x=>nk(x.sku)===nk(t.p.sku))),thr=THR[cfg.ketat]||THR.normal;
+  const card=t=>{const m=it.find(x=>nk(x.sku)===nk(t.p.sku));return `<div class="hit" data-s="${esc(m.sku)}"><img src="data:image/jpeg;base64,${t.p.thumb}" style="width:56px;height:56px;object-fit:cover;border-radius:6px;float:left;margin-right:10px"><b>${esc(m.nama)}</b><br><small>${esc(m.sku)} · kemiripan ${Math.round(t.s*100)}%</small><div style="clear:both"></div></div>`};
+  const ok=all.filter(t=>t.s>=thr).slice(0,5);
+  if(ok.length)$('#hits').innerHTML=ok.map(card).join('');
+  else if(all.length){$('#hits').innerHTML=`<div class="msg">Tidak ada barang yang cocok dengan foto ini. Kemiripan tertinggi hanya ${Math.round(all[0].s*100)}% (batas ${Math.round(thr*100)}%). Kalau Anda yakin barangnya ada, pilih ketelitian Longgar atau tambahkan foto contoh.<br><button class="g" id="kdekat" style="margin-top:8px">Lihat kandidat terdekat</button></div>`;$('#kdekat').onclick=()=>{$('#hits').innerHTML=all.slice(0,3).map(card).join('')}}
+  else $('#hits').innerHTML=`<div class="msg">Foto contoh termuat (${P.length} foto), tetapi SKU-nya tidak ada di Master: ${esc(raw.slice(0,3).map(t=>t.p.sku).join(', '))}. Samakan SKU di tab FOTO dengan tab Master, atau hapus lalu daftarkan ulang fotonya.</div>`;
+  $('#q').value='';info(M.master.length+' barang · '+P.length+' foto contoh (terbaik: '+Math.round((raw[0]||{s:0}).s*100)+'%)')}
  catch(e){info('');alert('Gagal memproses foto. Coba lagi, atau pakai foto yang lebih kecil.')}}
 $('#pcam').onclick=()=>$('#f-q').click();$('#f-q').onchange=e=>{const f=e.target.files[0];e.target.value='';if(f)cariFoto(f)};
 const cocokSku=(name,it)=>{const base=name.replace(/\.[^.]+$/,'').trim(),fd=s=>it.find(x=>norm(x.sku)===norm(s));let m=fd(base);if(m)return m.sku;m=fd(base.replace(/\s\(\d+\)$|[_\s-]\d{1,2}$/,''));return m?m.sku:null};
@@ -332,6 +337,7 @@ async function saveK(){if(!kCur)return;if(!cfg.petugas){askNama(false);return}
   alert('Pengurangan tersimpan. Sisa sekarang: '+j.hitungan)}catch(e){return alert('Gagal terkirim. Cek koneksi dan coba lagi.')}
  $('#kpanel').innerHTML='';kCur=null;await loadDaftar();renderK()}
 $('#kl').onchange=()=>{$('#kpanel').innerHTML='';kCur=null;renderK()};$('#kq').oninput=renderK;$('#khits').onclick=e=>{const x=e.target.closest('.hit');if(x)openK(x.dataset.s)};
+$('#simSel').value=cfg.ketat||'normal';$('#simSel').onchange=()=>{cfg.ketat=$('#simSel').value;S('cfg3',cfg)};
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x===b));['input','hasil','daftar','kurang','master'].forEach(v=>$('#v-'+v).classList.toggle('hidden',v!==b.dataset.v));if(b.dataset.v==='daftar')loadDaftar();if(b.dataset.v==='kurang')kInit();openNav(false)});
 render();if(!cfg.petugas)askNama(false);fetch(API_URL+'?bersih=1&_='+Date.now(),{cache:'no-store'}).catch(()=>{});load().then(loadDaftar);
 </script></body></html>
